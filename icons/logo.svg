@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <defs>
+    <radialGradient id="cara" cx="0.42" cy="0.36" r="0.7">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="0.72" stop-color="#fbfbfb"/><stop offset="1" stop-color="#ececec"/>
+    </radialGradient>
+    <linearGradient id="borde" x1="0.2" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#f6f6f6"/><stop offset="0.55" stop-color="#e2e2e2"/><stop offset="1" stop-color="#bdbdbd"/>
+    </linearGradient>
+    <linearGradient id="azul" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4c93be"/><stop offset="1" stop-color="#3877a0"/>
+    </linearGradient>
+    <filter id="sombra" x="-15%" y="-15%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <circle cx="200" cy="196" r="186" fill="url(#borde)" filter="url(#sombra)"/>
+  <circle cx="200" cy="196" r="174" fill="url(#cara)"/>
+  <path d="M44 226 H62 L68 216 L74 226 H82 L91 252 L102 168 L111 238 L116 226 H121" fill="none" stroke="#86b043" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="108" y="210" font-family="Avenir Next Condensed" font-weight="600" font-size="78" fill="url(#azul)">METRIA</text>
+  <text x="124" y="233.5" font-family="Avenir Next" font-weight="600" font-size="19" letter-spacing="0.6" fill="#666">APP</text>
+  <path d="M168 226 H340" fill="none" stroke="#86b043" stroke-width="4.6" stroke-linecap="round"/>
+</svg>
