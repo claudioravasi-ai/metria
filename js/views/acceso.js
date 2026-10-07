@@ -15,7 +15,7 @@ import { h, montar } from '../core/dom.js';
 import { icono } from '../core/iconos.js';
 import { toast, aviso, chip, fmt, fmt0 } from '../core/ui.js';
 import { CONFIG } from '../config.js';
-import { backend, registrarMedico, pedirCodigo, ingresarConCodigo, completarAltaPaciente } from '../data/servicio.js';
+import { backend, registrarMedico, completarMedico, pedirCodigo, ingresarConCodigo, completarAltaPaciente } from '../data/servicio.js';
 import { campo, segmentado, fuerzaClave, deslizador } from '../ui/campos.js';
 import * as G from '../ui/graficos.js';
 import { inclinar, revelar, contar, ecg } from '../ui/efectos.js';
@@ -46,7 +46,7 @@ const MSG = {
   'codigo/es-profesional': 'Ese correo es de una cuenta profesional: ingresá por «Soy profesional».',
   'alta/correo': 'El correo no coincide con el que validaste con el código.',
 };
-const mensaje = (e) => MSG[e?.code] || 'No se pudo completar. Intentá de nuevo.';
+const mensaje = (e) => MSG[e?.code] || (/permission|PERMISSION_DENIED/i.test(`${e?.code} ${e?.message}`) ? 'La base de datos rechazó el guardado: falta publicar las reglas de seguridad en Firebase (Realtime Database → Reglas).' : 'No se pudo completar. Intentá de nuevo.');
 const correoValido = (e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(e || '').trim());
 const enmascarar = (e) => { const [u, d] = String(e).split('@'); return `${u.slice(0, 1)}${'•'.repeat(Math.max(2, u.length - 2))}${u.length > 1 ? u.slice(-1) : ''}@${d}`; };
 const guardarTemp = (k, v) => { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, JSON.stringify(v)); } catch { /* */ } };
@@ -509,6 +509,44 @@ export function registroMedico() {
     catch (er) { console.error(er); err.textContent = mensaje(er); btn.disabled = false; btn.textContent = 'Solicitar alta'; }
   });
   pantalla(tarjetaAcceso('medico', 'Alta de profesional', 'Ingreso diferenciado para profesionales matriculados.', form));
+}
+
+/** La cuenta profesional existe pero su ficha no llegó a guardarse: se completa acá. */
+export function pantallaCompletarProfesional(u, onListo) {
+  const d = { matTipo: 'MN', email: u.email };
+  const err = h('div.form-error', { role: 'alert' });
+  const f = (etq, k, props = {}) => {
+    const c = campo(etq, { ...props, name: k }, { requerido: props.required !== false });
+    c.querySelector('input').addEventListener('input', (e) => { d[k] = e.target.value; });
+    return c;
+  };
+  const dj = h('input', { type: 'checkbox' });
+  const btn = h('button.btn.btn--primario.btn--grande.btn--bloque.btn--brillo', { type: 'submit' }, 'Guardar mis datos');
+  const form = h('form.form-acceso.form-acceso--ancho', { novalidate: true },
+    aviso('info', h('span', 'Tu cuenta ', h('strong', u.email), ' existe, pero faltan tus datos profesionales.')),
+    h('div.grid-form',
+      f('Nombre', 'nombre', { maxlength: 60 }), f('Apellido', 'apellido', { maxlength: 60 }),
+      h('div.campo', h('label', 'Matrícula'), segmentado([{ valor: 'MN', texto: 'Nacional (MN)' }, { valor: 'MP', texto: 'Provincial (MP)' }], 'MN', (v) => { d.matTipo = v; })),
+      f('Número de matrícula', 'matNumero', { inputmode: 'numeric', maxlength: 8 }),
+      f('Provincia (si es MP)', 'matProvincia', { maxlength: 40, required: false }),
+      f('Especialidad', 'especialidad', { maxlength: 60 })),
+    h('label.check.check--legal', dj, h('span', 'Declaro ser profesional matriculado y me comprometo a la confidencialidad (Ley 25.326, art. 10) y al secreto profesional (Ley 17.132, art. 11).')),
+    err, btn, h('div.form-links', h('button.btn-link', { type: 'button', onclick: () => backend().salir() }, 'Salir')));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    err.textContent = '';
+    const p = [
+      !d.nombre?.trim() || !d.apellido?.trim() ? 'Completá nombre y apellido.' : null,
+      !/^\d{3,8}$/.test(String(d.matNumero || '').replace(/\D/g, '')) ? 'Revisá el número de matrícula.' : null,
+      !d.especialidad?.trim() ? 'Indicá la especialidad.' : null,
+      !dj.checked ? 'Tenés que aceptar la declaración.' : null,
+    ].filter(Boolean);
+    if (p.length) { err.textContent = p[0]; return; }
+    btn.disabled = true;
+    try { await completarMedico(u.uid, d); onListo(); }
+    catch (er) { console.error(er); err.textContent = mensaje(er); btn.disabled = false; }
+  });
+  pantalla(tarjetaAcceso('paciente-sesion', 'Completá tus datos profesionales', 'Un paso y listo.', form));
 }
 
 /* ======================= ESTADOS INTERMEDIOS ======================= */

@@ -80,6 +80,12 @@ export async function completarAltaPaciente(uid, d) {
 
 export async function registrarMedico(d) {
   const { uid } = await B.registrar(d.email, d.clave);
+  await completarMedico(uid, d);
+  return uid;
+}
+
+/** Ficha profesional (también sirve si la cuenta se creó pero la ficha no llegó a guardarse). */
+export async function completarMedico(uid, d) {
   await B.escribir(`medicos/${uid}`, {
     nombre: limpiar(d.nombre), apellido: limpiar(d.apellido), especialidad: limpiar(d.especialidad),
     matricula: { tipo: d.matTipo === 'MP' ? 'MP' : 'MN', numero: String(d.matNumero).replace(/\D/g, '').slice(0, 8), provincia: limpiar(d.matProvincia) || null },
@@ -87,7 +93,7 @@ export async function registrarMedico(d) {
     compromiso: { version: VERSION_CONSENTIMIENTO, fecha: B.TS },
     creado: B.TS,
   });
-  await B.escribir(`medicosEstado/${uid}`, 'pendiente');
+  if (!(await B.leer(`medicosEstado/${uid}`).catch(() => null))) await B.escribir(`medicosEstado/${uid}`, 'pendiente');
   B.avisarCoordinador?.(); // correo al coordinador (solo en producción)
   return uid;
 }

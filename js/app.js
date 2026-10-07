@@ -7,7 +7,7 @@ import { toast, cerrarTodos } from './core/ui.js';
 import { CONFIG } from './config.js';
 import { iniciarBackend, perfilDe, backend } from './data/servicio.js';
 import { temaInicial, vigilarInactividad, logo } from './views/shell.js';
-import { portada, pantallaVerificar, pantallaPendiente, pantallaPuertaEquivocada, pantallaCompletarAlta } from './views/acceso.js';
+import { portada, pantallaVerificar, pantallaPendiente, pantallaPuertaEquivocada, pantallaCompletarAlta, pantallaCompletarProfesional } from './views/acceso.js';
 import { appPaciente } from './views/paciente.js';
 import { appMedico } from './views/medico.js';
 
@@ -45,7 +45,11 @@ async function alCambiar(u) {
   }
   if (perfil.rol === 'sin-perfil') {
     // Profesional recién creado: su ficha se escribe un instante después del alta
-    setTimeout(async () => { const p = await perfilDe(u); if (p.rol !== 'sin-perfil') { ultimoUid = undefined; alCambiar(u); } else portada(); }, 1200);
+    setTimeout(async () => {
+      const p = await perfilDe(u);
+      if (p.rol !== 'sin-perfil') { ultimoUid = undefined; alCambiar(u); }
+      else pantallaCompletarProfesional(u, () => { ultimoUid = undefined; alCambiar(u); });
+    }, 1200);
     return;
   }
   if (puerta && puerta !== perfil.rol) { pantallaPuertaEquivocada(perfil.rol); return; }
