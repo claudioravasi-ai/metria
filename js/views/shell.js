@@ -8,6 +8,7 @@ import { icono } from '../core/iconos.js';
 import { SECCIONES, estiloSeccion, modal, toast, fechaHora, confirmar } from '../core/ui.js';
 import { CONFIG, MS_DIA } from '../config.js';
 import { backend } from '../data/servicio.js';
+import { instalar, yaInstalada } from '../core/instalar.js';
 
 /* ---------- Tema claro / oscuro (preferencia local del equipo) ---------- */
 export function temaInicial() {
@@ -88,6 +89,7 @@ export function marco({ items, principales, actual, onIr, usuario, rolTexto, onS
             h('span.nav-ico', icono(it.icono || s.icono, { tam: 22 })), h('span', it.nombre || s.nombre), it.badge ? h('span.nav-badge', String(it.badge)) : null);
         }),
         h('button.hoja-item', { type: 'button', onclick: () => { m.cerrar(); alternarTema(); } }, h('span.nav-ico', icono('luna', { tam: 22 })), h('span', 'Tema claro / oscuro')),
+        yaInstalada() ? null : h('button.hoja-item', { type: 'button', onclick: () => { m.cerrar(); instalar(); } }, h('span.nav-ico', icono('bajar', { tam: 22 })), h('span', 'Instalar app')),
         h('button.hoja-item.hoja-item--salir', { type: 'button', onclick: () => { m.cerrar(); onSalir(); } }, h('span.nav-ico', icono('salir', { tam: 22 })), h('span', 'Cerrar sesión'))),
     });
   };

@@ -186,4 +186,4 @@ function validar(p, w) {
   return e;
 }
 
-export { chip, aviso, backend };
+export { chip, aviso, backend, PAT, SINT, FAM };

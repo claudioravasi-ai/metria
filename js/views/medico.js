@@ -20,6 +20,7 @@ import { panelEstudiosMedico } from './estudios.js';
 import { panelGlp1Medico } from './tratamiento.js';
 import { vistaManual } from './manual.js';
 import { vistaPlan } from './plan.js';
+import { imprimirInforme } from './informe.js';
 import { cambioClave, cambioCorreo, POLITICA, TERMINOS, verTexto } from './legal.js';
 
 const RIESGO = { 'muy-alto': ['Muy alto', 'peligro'], alto: ['Alto', 'peligro'], intermedio: ['Intermedio', 'aviso'], limite: ['Limítrofe', 'aviso'], bajo: ['Bajo', 'ok'] };
@@ -125,6 +126,7 @@ export function appMedico(perfil, { onSalir }) {
       // La pestaña activa siempre a la vista (en el teléfono las pestañas se deslizan)
       const pes = c.querySelector('.pestanas'), act = pes?.querySelector('[aria-current="page"]');
       if (pes && act) pes.scrollLeft = act.offsetLeft - pes.clientWidth / 2 + act.clientWidth / 2;
+      pes?.dispatchEvent(new Event('scroll')); // muestra u oculta las flechas ya montadas
     }
     if (mismo) window.scrollTo(0, scroll); else window.scrollTo(0, 0);
   }
@@ -234,9 +236,10 @@ export function appMedico(perfil, { onSalir }) {
             await verificarIdentidad(F.uid, perfil, true); toast('Identidad verificada', 'ok');
           }
         } }, icono('huella', { tam: 16 }), 'Verificar identidad'),
-        h('button.btn.btn--suave', { type: 'button', onclick: () => window.print() }, icono('imprimir', { tam: 16 }), 'Imprimir')));
-    const tabs = h('nav.pestanas', { 'aria-label': 'Secciones de la ficha' }, ...PESTANAS.map(([k, t, ic, sec]) => h('a.pestana', { href: `#ficha/${k}`, 'aria-current': k === tab ? 'page' : null, style: estiloSeccion(sec) }, icono(ic, { tam: 16 }), t,
+        h('button.btn.btn--suave', { type: 'button', onclick: () => imprimirInforme({ ev, F, medico: perfil }) }, icono('imprimir', { tam: 16 }), 'Imprimir informe')));
+    const nav = h('nav.pestanas', { 'aria-label': 'Secciones de la ficha' }, ...PESTANAS.map(([k, t, ic, sec]) => h('a.pestana', { href: `#ficha/${k}`, 'aria-current': k === tab ? 'page' : null, style: estiloSeccion(sec) }, icono(ic, { tam: 16 }), t,
       k === 'estudios' && Object.keys(F.estudios).length ? h('span.nav-badge', String(Object.keys(F.estudios).length)) : null)));
+    const tabs = conFlechas(nav);
     const irDatos = () => { location.hash = 'ficha/datos'; };
     let cuerpo;
     switch (tab) {
@@ -355,4 +358,22 @@ export function appMedico(perfil, { onSalir }) {
   if (previa && location.hash.startsWith('#ficha')) { const tab = location.hash.split('/')[1]; abrirFicha(previa); location.hash = `ficha/${tab || 'resumen'}`; }
   else render();
   return { detener };
+}
+
+/* Flechas ‹ › para recorrer las pestañas cuando no entran (con mouse no hay otra forma de deslizarlas). */
+function conFlechas(nav) {
+  const flecha = (dir) => h(`button.pestanas-flecha.pestanas-flecha--${dir < 0 ? 'izq' : 'der'}`, {
+    type: 'button', 'aria-label': dir < 0 ? 'Ver pestañas anteriores' : 'Ver más pestañas', tabindex: '-1',
+    onclick: () => nav.scrollBy({ left: dir * Math.max(120, nav.clientWidth * 0.7), behavior: 'smooth' }),
+  }, icono(dir < 0 ? 'flechaIzq' : 'flechaDer', { tam: 16 }));
+  const marco = h('div.pestanas-marco', flecha(-1), nav, flecha(1));
+  const actualizar = () => {
+    const max = nav.scrollWidth - nav.clientWidth;
+    marco.classList.toggle('hay-antes', nav.scrollLeft > 4);
+    marco.classList.toggle('hay-despues', nav.scrollLeft < max - 4);
+  };
+  nav.addEventListener('scroll', actualizar, { passive: true });
+  if ('ResizeObserver' in window) new ResizeObserver(actualizar).observe(nav);
+  window.addEventListener('resize', () => { if (nav.isConnected) actualizar(); }, { passive: true });
+  return marco;
 }

@@ -24,6 +24,7 @@ import * as R from '../engine/risk.js';
 import { logo, alternarTema, barraDemo } from './shell.js';
 import { POLITICA, TERMINOS, verTexto } from './legal.js';
 import { DEMO } from '../data/semilla.js';
+import { botonInstalar } from '../core/instalar.js';
 
 const raiz = () => document.getElementById('app');
 const MSG = {
@@ -181,7 +182,8 @@ export function portada() {
         h('p.hero-bajada', 'Metabolismo, cuerpo, corazón, laboratorio, tratamiento y estudios médicos. Todo calculado al instante con las fórmulas que usan los médicos.'),
         h('div.hero-cta',
           h('button.btn.btn--primario.btn--grande.btn--brillo', { type: 'button', onclick: () => ingresoPaciente() }, icono('usuario', { tam: 18 }), 'Soy paciente'),
-          h('button.btn.btn--vidrio.btn--grande', { type: 'button', onclick: () => ingresoProfesional() }, icono('estetoscopio', { tam: 18 }), 'Soy profesional')),
+          h('button.btn.btn--vidrio.btn--grande', { type: 'button', onclick: () => ingresoProfesional() }, icono('estetoscopio', { tam: 18 }), 'Soy profesional'),
+          botonInstalar('btn.btn--vidrio.btn--grande')),
         h('div.hero-sellos', chip('PREVENT · AHA 2023', 'info', 'corazon'), chip('Ley 25.326', 'ok', 'escudo'), chip('Sin contraseñas para pacientes', 'neutro', 'candado'))),
       h('div.hero-der', vitrina()),
       ecg({ clase: 'hero-ecg' })),

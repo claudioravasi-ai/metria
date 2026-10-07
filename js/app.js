@@ -10,6 +10,7 @@ import { temaInicial, vigilarInactividad, logo } from './views/shell.js';
 import { portada, pantallaVerificar, pantallaPendiente, pantallaPuertaEquivocada, pantallaCompletarAlta, pantallaCompletarProfesional } from './views/acceso.js';
 import { appPaciente } from './views/paciente.js';
 import { appMedico } from './views/medico.js';
+import './core/instalar.js'; // escucha el aviso de instalación desde el arranque
 
 let actual = null, dejarDeVigilar = null, ultimoUid = undefined;
 
