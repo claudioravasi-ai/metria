@@ -84,6 +84,13 @@ export async function ingresarConCodigo(email, codigo, recordar = false) {
   await A.setPersistence(auth, recordar ? A.browserLocalPersistence : A.browserSessionPersistence);
   await A.signInWithCustomToken(auth, token);
 }
+/** Segunda opinión con IA: el servidor verifica que quien pide sea un médico autorizado. */
+export async function analizarIA(datos) {
+  if (!CFG.codigosURL) throw Object.assign(new Error('sin servidor'), { code: 'ia/sin-servidor' });
+  const idToken = await auth.currentUser.getIdToken();
+  try { return (await servidor('ia', { idToken, datos })).resultado; }
+  catch (e) { throw Object.assign(new Error(e.code === 'codigo/no-autorizado' ? 'tu cuenta no está autorizada' : e.code === 'codigo/ia-sin-clave' ? 'falta la clave de Anthropic en el servidor' : 'el servidor no respondió'), { code: e.code }); }
+}
 /** Le avisa por correo al coordinador que hay profesionales esperando autorización (el servidor lo lee de la base). */
 export const avisarCoordinador = () => servidor('avisoProfesional', {}).catch(() => {});
 export async function restablecer(email) {

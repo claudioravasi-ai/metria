@@ -4,6 +4,8 @@
    Cada fármaco lleva una o más clases; las interacciones van por clase.
    ============================================================ */
 
+import { MEDS_EXTRA } from './conocimiento.js';
+
 export const CLASES = {
   insulina: 'Insulina',
   sulfonilurea: 'Sulfonilurea',
@@ -145,7 +147,7 @@ const BASE = [
   ['Teofilina', ['Teolong'], ['teofilina']],
 ];
 
-export const VADEMECUM = BASE.map(([g, m, c]) => ({ generico: g, marcas: m, clases: c }));
+export const VADEMECUM = [...BASE, ...MEDS_EXTRA.filter(([g]) => !BASE.some(([b]) => b === g))].map(([g, m, c]) => ({ generico: g, marcas: m, clases: c }));
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 

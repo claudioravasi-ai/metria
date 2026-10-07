@@ -19,8 +19,9 @@ import { vistaEstudiosPaciente } from './estudios.js';
 import { vistaTratamientoPaciente } from './tratamiento.js';
 import { vistaPrivacidad } from './legal.js';
 import { vistaManual } from './manual.js';
+import { vistaPlan } from './plan.js';
 
-const ITEMS = ['inicio', 'datos', 'metabolismo', 'cuerpo', 'corazon', 'laboratorio', 'tratamiento', 'estudios', 'privacidad', 'ayuda'];
+const ITEMS = ['inicio', 'datos', 'plan', 'metabolismo', 'cuerpo', 'corazon', 'laboratorio', 'tratamiento', 'estudios', 'privacidad', 'ayuda'];
 const PRINCIPALES = ['inicio', 'cuerpo', 'corazon', 'estudios'];
 
 export function appPaciente(perfil, { onSalir }) {
@@ -73,7 +74,7 @@ export function appPaciente(perfil, { onSalir }) {
   function render() {
     if (!S.listo.pac || detenido) return;
     const id = seccion();
-    const ev = evaluarPaciente(S.perfil, S.pac.clinica || {}, new Date(B.ahora()));
+    const ev = evaluarPaciente(S.perfil, S.pac.clinica || {}, new Date(B.ahora()), { planActivo: S.pac.plan?.estado === 'activo' });
     const irDatos = () => ir('datos');
     let contenido;
     switch (id) {
@@ -85,6 +86,7 @@ export function appPaciente(perfil, { onSalir }) {
       case 'cuerpo': contenido = seccionCuerpo(ev, { rol: 'paciente', mediciones: S.pac.mediciones, irDatos }); break;
       case 'corazon': contenido = seccionCorazon(ev, { rol: 'paciente', irDatos }); break;
       case 'laboratorio': contenido = seccionLaboratorio(ev, { rol: 'paciente', irDatos }); break;
+      case 'plan': contenido = vistaPlan(ev, { rol: 'paciente' }); break;
       case 'tratamiento': contenido = vistaTratamientoPaciente({ ev, plan: S.pac.plan, tolerancia: S.pac.tolerancia, uid }); break;
       case 'estudios': contenido = vistaEstudiosPaciente({ uid, estudios: S.estudios }); break;
       case 'privacidad': contenido = vistaPrivacidad({ uid, perfil: S.perfil, auditoria: S.auditoria, estudios: S.estudios }); break;
@@ -149,6 +151,7 @@ export function appPaciente(perfil, { onSalir }) {
         tile('laboratorio', 'Laboratorio', ev.labsInt.length ? h('span', cifra(ev.labsInt.length - labsMal, fmt0), h('small', ` de ${ev.labsInt.length} en rango`)) : '—', ev.labs.fecha ? `Análisis del ${fecha(ev.labs.fecha)}` : 'Sin análisis cargados'),
         tile('tratamiento', 'Tratamiento', plan?.estado === 'activo' ? h('strong', GL.farmaco(plan.farmaco)?.comercial || 'Activo') : h('strong', 'Sin plan'), plan?.estado === 'activo' ? `Desde el ${fecha(plan.inicio)}` : 'Orientación según tus datos'),
         tile('estudios', 'Estudios', h('span', cifra(lista.length, fmt0), h('small', lista.length === 1 ? ' estudio' : ' estudios')), nuevos.length ? chip(`${nuevos.length} nuevos`, 'ok') : 'Al día'),
+        tile('plan', 'Plan integral', ev.plan?.dieta ? h('span', cifra(ev.plan.dieta.kcal, fmt0), h('small', ' kcal/día')) : h('strong', '—'), ev.plan?.dieta ? ev.plan.dieta.patron : 'Completá tus datos'),
         tile('datos', 'Mis datos', h('strong.num', `${ev.completitud.pct} %`), ev.completitud.faltan.length ? `Falta: ${ev.completitud.faltan.slice(0, 2).join(', ')}` : 'Completo'),
         tile('privacidad', 'Privacidad', h('strong', 'Protegida'), 'Quién vio tus datos')),
       tarjeta('Varios equipos a la vez', { icono: 'dispositivos', clase: 'card--sutil' }, h('p.ayuda', 'Podés usar la app en el teléfono, la tablet y la computadora al mismo tiempo: los cambios se sincronizan solos.')));

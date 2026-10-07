@@ -19,13 +19,14 @@ import { formularioDatos } from './datos-form.js';
 import { panelEstudiosMedico } from './estudios.js';
 import { panelGlp1Medico } from './tratamiento.js';
 import { vistaManual } from './manual.js';
+import { vistaPlan } from './plan.js';
 import { cambioClave, cambioCorreo, POLITICA, TERMINOS, verTexto } from './legal.js';
 
 const RIESGO = { 'muy-alto': ['Muy alto', 'peligro'], alto: ['Alto', 'peligro'], intermedio: ['Intermedio', 'aviso'], limite: ['Limítrofe', 'aviso'], bajo: ['Bajo', 'ok'] };
 const GLP = { indicado: ['Candidato', 'ok'], precaucion: ['Candidato c/ precaución', 'aviso'], 'no-indicado': ['No indicado', 'neutro'], contraindicado: ['Contraindicado', 'peligro'] };
 const PESTANAS = [
   ['resumen', 'Resumen', 'grafico', 'panel'], ['datos', 'Datos', 'datos', 'datos'], ['metabolismo', 'Metabolismo', 'llama', 'metabolismo'], ['cuerpo', 'Cuerpo', 'cuerpo', 'cuerpo'],
-  ['corazon', 'Corazón', 'corazon', 'corazon'], ['laboratorio', 'Laboratorio', 'matraz', 'laboratorio'], ['tratamiento', 'Tratamiento', 'jeringa', 'tratamiento'],
+  ['corazon', 'Corazón', 'corazon', 'corazon'], ['laboratorio', 'Laboratorio', 'matraz', 'laboratorio'], ['tratamiento', 'Tratamiento', 'jeringa', 'tratamiento'], ['plan', 'Plan integral', 'objetivo', 'plan'],
   ['estudios', 'Estudios', 'carpeta', 'estudios'], ['notas', 'Notas', 'editar', 'ayuda'], ['accesos', 'Accesos', 'ojo', 'privacidad'],
 ];
 
@@ -219,7 +220,7 @@ export function appMedico(perfil, { onSalir }) {
     const F = S.ficha;
     if (!F.pac) return cargando('Abriendo la ficha…');
     const per = F.pac.perfil || {};
-    const ev = evaluarPaciente(per, F.pac.clinica || {}, new Date(B.ahora()));
+    const ev = evaluarPaciente(per, F.pac.clinica || {}, new Date(B.ahora()), { planActivo: F.pac.plan?.estado === 'activo' });
     const nombre = `${per.nombre} ${per.apellido}`;
     const dniEl = h('span.num', `DNI ${dniMascara(per.dni)}`);
     const verDni = h('button.btn-link', { type: 'button', onclick: () => { dniEl.textContent = `DNI ${Number(per.dni).toLocaleString('es-AR')}`; verDni.remove(); } }, 'mostrar');
@@ -247,6 +248,7 @@ export function appMedico(perfil, { onSalir }) {
       case 'corazon': cuerpo = seccionCorazon(ev, { rol: 'medico', irDatos }); break;
       case 'laboratorio': cuerpo = seccionLaboratorio(ev, { rol: 'medico', irDatos }); break;
       case 'tratamiento': cuerpo = panelGlp1Medico({ ev, plan: F.pac.plan, tolerancia: F.pac.tolerancia, pacUid: F.uid, medico: perfil, paciente: nombre }); break;
+      case 'plan': cuerpo = vistaPlan(ev, { rol: 'medico', pacUid: F.uid, medico: perfil }); break;
       case 'estudios': cuerpo = panelEstudiosMedico({ pacUid: F.uid, paciente: nombre, estudios: F.estudios, verificado: !!F.verif }); break;
       case 'notas': cuerpo = vistaNotas(F); break;
       case 'accesos': cuerpo = vistaAccesos(F); break;

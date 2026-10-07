@@ -2,7 +2,7 @@
    - Red primero para los archivos de la app (siempre la versión nueva si hay conexión),
      con copia local para abrir sin internet.
    - NUNCA guarda datos de salud: no cachea Firebase, ni estudios, ni nada de otro dominio. */
-const CACHE = 'metria-1.0.2';
+const CACHE = 'metria-1.1.0';
 const BASE = ['./', './index.html', './css/app.css', './js/app.js', './manifest.webmanifest', './icons/logo-256.png', './icons/logo-512.png', './icons/favicon-64.png', './icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {

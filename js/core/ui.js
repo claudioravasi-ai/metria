@@ -95,6 +95,7 @@ export const SECCIONES = {
   corazon: { nombre: 'Corazón', icono: 'corazon', c1: '#f43f5e', c2: '#fb923c' },
   laboratorio: { nombre: 'Laboratorio', icono: 'matraz', c1: '#8b5cf6', c2: '#d946ef' },
   tratamiento: { nombre: 'Tratamiento', icono: 'jeringa', c1: '#2563eb', c2: '#06b6d4' },
+  plan: { nombre: 'Plan integral', icono: 'objetivo', c1: '#ec4899', c2: '#f59e0b' },
   estudios: { nombre: 'Estudios', icono: 'carpeta', c1: '#10b981', c2: '#84cc16' },
   privacidad: { nombre: 'Privacidad', icono: 'escudo', c1: '#475569', c2: '#0ea5e9' },
   ayuda: { nombre: 'Ayuda', icono: 'ayuda', c1: '#eab308', c2: '#f97316' },

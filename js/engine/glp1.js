@@ -215,7 +215,9 @@ function contraindicaciones(c) {
   if (c.alcohol === 'riesgo') rel.push(['alcohol', 'Consumo de alcohol de riesgo', 'Aumenta el riesgo de pancreatitis e hipoglucemia.']);
   if (p.cirugiaBariatrica) rel.push(['bariatrica', 'Cirugía bariátrica previa', 'Puede usarse ante reganancia; vigilar déficit nutricional y tolerancia.']);
   const map = ([id, texto, conducta]) => ({ id, texto, conducta });
-  return { absolutas: abs.map(map), relativas: rel.map(map) };
+  // Enfermedades y análisis "extra" reconocidos por la base de conocimiento
+  const ex = c.extrasCI || {};
+  return { absolutas: [...abs.map(map), ...(ex.absolutas || [])], relativas: [...rel.map(map), ...(ex.relativas || [])] };
 }
 
 function interacciones(meds) {

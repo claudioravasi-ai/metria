@@ -323,7 +323,7 @@ export function registroPaciente() {
   };
   const consent = [
     ['datos', h('span', 'Acepto la ', h('button.btn-link', { type: 'button', onclick: () => verTexto('Política de privacidad', POLITICA()) }, 'política de privacidad'), ' y presto consentimiento expreso para el tratamiento de mis datos de salud con fines de atención médica (Ley 25.326, arts. 5 y 7).')],
-    ['transf', h('span', 'Entiendo que los datos se alojan en servidores de un proveedor (Google Firebase) que pueden estar fuera de la Argentina y consiento esa transferencia (art. 12).')],
+    ['transf', h('span', 'Entiendo que los datos se alojan en servidores de un proveedor (Google Firebase) que pueden estar fuera de la Argentina y consiento esa transferencia (art. 12). Si mi médico lo pide, una copia sin mi nombre ni DNI puede analizarse con IA (Anthropic, EE. UU.).')],
     ['terminos', h('span', 'Acepto los ', h('button.btn-link', { type: 'button', onclick: () => verTexto('Términos de uso', TERMINOS()) }, 'términos de uso'), ' y entiendo que los cálculos son orientativos y no reemplazan la consulta.')],
     ['mayor', h('span', 'Soy mayor de 18 años.')],
   ].map(([k, txt]) => { const i = h('input', { type: 'checkbox', name: k, checked: !!previo.consentimiento }); return { k, i, el: h('label.check.check--legal', i, txt) }; });
@@ -376,7 +376,7 @@ export function pantallaCompletarAlta(u, onListo) {
   };
   const consent = yaTiene ? [] : [
     h('span', 'Acepto la política de privacidad y el tratamiento de mis datos de salud con fines de atención médica (Ley 25.326).'),
-    h('span', 'Consiento que los datos se alojen en servidores de Google Firebase, que pueden estar fuera de la Argentina.'),
+    h('span', 'Consiento que los datos se alojen en servidores de Google Firebase, que pueden estar fuera de la Argentina, y que mi médico pueda analizar una copia sin mi nombre ni DNI con IA (Anthropic, EE. UU.).'),
     h('span', 'Acepto los términos de uso y soy mayor de 18 años.'),
   ].map((txt) => { const i = h('input', { type: 'checkbox' }); return { i, el: h('label.check.check--legal', i, txt) }; });
   const btn = h('button.btn.btn--primario.btn--grande.btn--bloque.btn--brillo', { type: 'submit' }, icono('ok', { tam: 18 }), 'Listo, entrar');

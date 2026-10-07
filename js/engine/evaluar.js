@@ -10,6 +10,8 @@ import * as R from './risk.js';
 import * as O from './obesity.js';
 import * as G from './glp1.js';
 import { banderas } from './meds.js';
+import { procesarExtras } from './conocimiento.js';
+import { planIntegral } from './plan.js';
 
 const n = (v) => (v === '' || v == null ? null : Number.isFinite(+v) ? +v : null);
 
@@ -29,19 +31,23 @@ const CLAVE = [
   ['labs.glucosa', 'Glucemia'], ['labs.creatinina', 'Creatinina'], ['labs.hba1c', 'HbA1c'],
 ];
 
-export function evaluarPaciente(perfil = {}, cl = {}, hoy = new Date()) {
+export function evaluarPaciente(perfil = {}, cl = {}, hoy = new Date(), opts = {}) {
   const an = numeros(cl.antropo), vit = numeros(cl.vitales), labs = numeros(cl.labs);
-  const hab = cl.habitos || {}, pat = cl.patologias || {}, fam = cl.familia || {}, sint = cl.sintomas || {};
+  const hab = cl.habitos || {}, fam = cl.familia || {}, sint = cl.sintomas || {};
   const meds = cl.meds || [];
   const edad = A.edad(perfil.fechaNac, hoy);
   const sexo = perfil.sexo === 'M' ? 'M' : 'F';
   const b = banderas(meds);
+  // Enfermedades y análisis "extra" (texto libre) reconocidos por la base de conocimiento
+  const extras = procesarExtras(cl, { sexo, clases: b.clases });
+  const pat = { ...(cl.patologias || {}) };
+  for (const e of extras.enfermedades) pat[e.id] = true;
 
   const comp = A.composicion({ peso: an.peso, talla: an.talla, edad, sexo, cintura: an.cintura, cadera: an.cadera, grasa: an.grasa });
   const ener = A.energia({ peso: an.peso, talla: an.talla, edad, sexo, grasa: comp?.grasa?.usada, actividad: hab.actividad });
   const der = L.derivados(labs, { edad, sexo });
   const dm = !!(pat.dm2 || pat.dm1);
-  const labsInt = L.interpretar(labs, der, { edad, sexo, dm });
+  const labsInt = [...L.interpretar(labs, der, { edad, sexo, dm }), ...extras.labs];
   const glucemia = L.estadoGlucemico(labs.glucosa, labs.hba1c, dm);
   const pa = R.categoriaPresion(vit.pas, vit.pad);
   const sm = R.sindromeMetabolico({ sexo, cintura: an.cintura, tg: labs.tg, hdl: labs.hdl, pas: vit.pas, pad: vit.pad, glucosa: labs.glucosa, pat, meds: b });
@@ -80,6 +86,7 @@ export function evaluarPaciente(perfil = {}, cl = {}, hoy = new Date()) {
     edad, sexo, imc: comp?.imc, peso: an.peso, talla: an.talla, pat, fam, meds, labs,
     tfg: der.tfg, erc: der.erc, fib4: der.fib4, alcohol: hab.alcohol, comp,
     prefiereOral: !!cl.preferencias?.oral, glucemia: glucemia?.id, ldl: der.ldl, pas: vit.pas, pad: vit.pad,
+    extrasCI: { absolutas: extras.ciAbsolutas, relativas: extras.ciRelativas },
   });
 
   const fuentes = { perfil, antropo: an, vitales: vit, habitos: hab, labs };
@@ -89,13 +96,15 @@ export function evaluarPaciente(perfil = {}, cl = {}, hoy = new Date()) {
     return v === undefined || v === null || v === '';
   }).map(([, t]) => t);
 
-  return {
-    edad, sexo, antropo: an, vitales: vit, habitos: hab, pat, fam, meds, labs, banderas: b,
+  const ev = {
+    edad, sexo, antropo: an, vitales: vit, habitos: hab, pat, fam, sintomas: sint, meds, labs, banderas: b,
     comp, ener, der, labsInt, glucemia, pa, sm,
     prevent: prev, preventIn, tfgSupuesta, framingham: fram, clinica, categoria, potenciadores: pot,
-    ldlObjetivo, contrib, findrisc, eoss, lancet, glp1,
+    ldlObjetivo, contrib, findrisc, eoss, lancet, glp1, extras, planActivo: !!opts.planActivo,
     completitud: { pct: Math.round(((CLAVE.length - faltan.length) / CLAVE.length) * 100), faltan },
   };
+  ev.plan = planIntegral(ev, extras);
+  return ev;
 }
 
 /** Resumen corto para el índice que ven los médicos (sin diagnósticos en texto). */

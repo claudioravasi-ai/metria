@@ -37,7 +37,7 @@ export function h(spec, props = null, ...hijos) {
         v(el);
       } else if (k === 'html') {
         el.innerHTML = v; // solo con contenido propio, nunca con datos del usuario
-      } else if (svg || k.includes('-') || k === 'for' || k === 'role') {
+      } else if (svg || k.includes('-') || k === 'for' || k === 'role' || k === 'list') {
         el.setAttribute(k === 'className' ? 'class' : k, v === true ? '' : v);
       } else if (k in el) {
         el[k] = v;

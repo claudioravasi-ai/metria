@@ -289,3 +289,28 @@ export async function exportarMisDatos(uid) {
   const est = Object.fromEntries(Object.entries(estudios || {}).map(([k, m]) => [k, { ...m, bosquejo: undefined }]));
   return { exportado: new Date().toISOString(), app: CONFIG.app, paciente: pac, estudios: est, auditoria, solicitudes };
 }
+
+/* ---------- Segunda opinión con IA (solo médicos) ----------
+   Se envían datos SIN identificar: ni nombre, ni DNI, ni correo, ni fecha de nacimiento. */
+export function datosParaIA(ev) {
+  const si = (o) => Object.entries(o || {}).filter(([, v]) => v === true).map(([k]) => k);
+  return {
+    edad: ev.edad, sexo: ev.sexo === 'M' ? 'masculino' : 'femenino',
+    medidas: ev.antropo, presion: ev.vitales, habitos: ev.habitos,
+    enfermedades: si(ev.pat), enfermedadesTextoLibre: (ev.extras?.noReconocidas || []),
+    familia: { ...ev.fam }, sintomas: si(ev.sintomas),
+    medicacion: (ev.meds || []).map((m) => m.nombre),
+    laboratorio: Object.fromEntries(Object.entries(ev.labs || {}).filter(([k]) => k !== 'fecha')),
+    otrosAnalisis: (ev.extras?.labs || []).map((l) => `${l.nombre}: ${l.valor} ${l.unidad} (ref ${l.ref})`),
+    calculos: {
+      imc: ev.comp?.imc, tmb: ev.ener?.tmb, get: ev.ener?.get, filtrado: ev.der?.tfg, ldl: ev.der?.ldl,
+      riesgo: ev.categoria?.nombre, prevent: ev.prevent?.ok ? { ecv10: ev.prevent.cvd10, ascvd10: ev.prevent.ascvd10, ic10: ev.prevent.hf10 } : null,
+      glp1: { veredicto: ev.glp1?.veredicto, sugerido: ev.glp1?.opciones?.[0]?.farmaco?.comercial, contraindicaciones: ev.glp1?.contraindicaciones },
+      planAutomatico: (ev.plan?.tratamiento || []).map((t) => t.titulo),
+    },
+  };
+}
+export async function analizarConIA(ev) {
+  if (!B.analizarIA) throw Object.assign(new Error('sin servidor'), { code: 'ia/sin-servidor' });
+  return B.analizarIA(datosParaIA(ev));
+}

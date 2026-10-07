@@ -880,6 +880,44 @@ input.rango-num { width: 76px; min-height: 34px; padding: 4px 8px; text-align: r
 .modelo { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--aviso-bg); color: var(--aviso); font-size: 13px; font-weight: 650; }
 .manual { display: grid; gap: 0; }
 
+/* Datos extra: enfermedades y análisis en texto libre */
+.editor-extra { display: grid; gap: 10px; }
+.btn-chip { border: 0; background: none; color: inherit; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 0 0 4px; }
+.meds-nueva--2 { grid-template-columns: 1fr auto; }
+.analisis-lista { display: grid; gap: 8px; }
+.analisis-fila { display: grid; grid-template-columns: 2fr 1fr 1fr .9fr .9fr auto auto; gap: 8px; align-items: center; padding: 8px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line); }
+.analisis-estado .chip { font-size: 11.5px; }
+@media (max-width: 767px) { .analisis-fila { grid-template-columns: 1fr 1fr; } .analisis-fila > :first-child, .analisis-estado { grid-column: 1 / -1; } }
+
+/* Plan integral */
+.plan-alim { display: grid; grid-template-columns: minmax(180px, 240px) 1fr; gap: 16px; align-items: stretch; }
+.plan-kcal { display: grid; align-content: center; gap: 2px; padding: 18px; border-radius: 20px; color: #fff; background: linear-gradient(135deg, #f97316, #ec4899); box-shadow: 0 16px 32px -18px #ec4899; }
+.plan-kcal small, .plan-kcal span { opacity: .9; font-size: 12.5px; font-weight: 650; }
+.plan-kcal strong { font-size: clamp(34px, 5vw, 46px); font-weight: 700; line-height: 1.05; }
+.plan-macros { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.macro { padding: 12px 14px; border-radius: 16px; background: color-mix(in srgb, var(--m) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--m) 30%, transparent); border-left: 5px solid var(--m); }
+.macro small { display: block; color: var(--text-2); font-size: 12px; font-weight: 650; }
+.macro strong { font-size: 14.5px; }
+.plan-objetivo { display: flex; gap: 8px; align-items: center; font-weight: 650; margin: 14px 0 0; }
+.plan-objetivo .ico { color: #ec4899; }
+.plan-act { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.plan-dato { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line); }
+.plan-dato > .ico { color: var(--c1); margin-top: 3px; }
+.plan-dato small { display: block; color: var(--text-2); font-size: 12px; font-weight: 650; }
+.plan-dato strong { font-size: 14px; }
+.plan-trat { display: grid; gap: 10px; }
+.trat { padding: 14px 16px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line); border-left: 5px solid #f59e0b; }
+.trat--alta { border-left-color: #ef4444; }
+.trat header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+.linea-tiempo { list-style: none; margin: 0; padding: 0 0 0 18px; display: grid; gap: 12px; border-left: 3px solid color-mix(in srgb, var(--c1) 40%, var(--line)); }
+.linea-tiempo li { position: relative; display: grid; gap: 2px; }
+.linea-tiempo li::before { content: ''; position: absolute; left: -26px; top: 4px; width: 13px; height: 13px; border-radius: 50%; background: linear-gradient(135deg, var(--c1), var(--c2)); box-shadow: 0 0 0 4px var(--surface); }
+.linea-tiempo span { color: var(--text-2); font-size: 14px; }
+.ia-resultado { margin-top: 12px; }
+.ia-caja { display: grid; gap: 10px; padding: 16px; border-radius: 18px; border: 1px solid color-mix(in srgb, #8b5cf6 35%, var(--line)); background: color-mix(in srgb, #8b5cf6 6%, var(--surface)); }
+.ia-resumen { font-size: 15px; margin: 0; }
+@media (max-width: 700px) { .plan-alim { grid-template-columns: 1fr; } }
+
 /* =====================================================================
    DISEÑO 2.0 — portada que deslumbra, vidrio, luz y movimiento
    ===================================================================== */

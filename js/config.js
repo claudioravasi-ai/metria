@@ -11,7 +11,7 @@
 
 export const CONFIG = {
   app: 'Metria',
-  version: '1.0.0',
+  version: '1.1.0',
   consultorio: 'Consultorio médico',     // nombre que ven los pacientes
   responsable: 'Responsable de la base: Dr. Claudio A. Ravasi',
   contacto: 'claudioravasi@outlook.com',    // correo para derechos de acceso, rectificación y supresión
@@ -24,17 +24,17 @@ export const CONFIG = {
 
   // Servidor de códigos de ingreso de pacientes (Google Apps Script publicado como aplicación web).
   // Ver apps-script/Codigos.gs e INSTALAR.md. En modo demo no se usa.
-  codigosURL: '',
+  codigosURL: 'https://script.google.com/macros/s/AKfycbxHs7I9GhqKwTYY2_IEPrrfgnr3rkE2-BOi7lW42k8nJtIjho7kHq3o_Vc1Xbi3T6U6zA/exec',
 
-  const firebaseConfig = {
-  apiKey: "AIzaSyCEDXi8ugKd4jlEAnbmFrz8GDl3ZZQfBhA",
-  authDomain: "metria-e08ce.firebaseapp.com",
-  databaseURL: "https://metria-e08ce-default-rtdb.firebaseio.com",
-  projectId: "metria-e08ce",
-  storageBucket: "metria-e08ce.firebasestorage.app",
-  messagingSenderId: "1096441546580",
-  appId: "1:1096441546580:web:98776c853d6a207598aac1"
-};
+  firebase: {
+    apiKey: 'AIzaSyCEDXi8ugKd4jlEAnbmFrz8GDl3ZZQfBhA',
+    authDomain: 'metria-e08ce.firebaseapp.com',
+    databaseURL: 'https://metria-e08ce-default-rtdb.firebaseio.com',
+    projectId: 'metria-e08ce',
+    storageBucket: 'metria-e08ce.firebasestorage.app',
+    messagingSenderId: '1096441546580',
+    appId: '1:1096441546580:web:98776c853d6a207598aac1',
+  },
 
   // Estudios
   horasTrasDescarga: 72,          // se borran 3 días después de la primera descarga

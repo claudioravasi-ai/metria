@@ -7,7 +7,7 @@
 import { h } from '../core/dom.js';
 import { icono } from '../core/iconos.js';
 import { heroe, tarjeta, toast, fmt, fmt0, chip, aviso } from '../core/ui.js';
-import { campo, segmentado, interruptor, fichas, editorMeds, leerNum } from '../ui/campos.js';
+import { campo, segmentado, interruptor, fichas, editorMeds, leerNum, editorEnfermedades, editorAnalisis } from '../ui/campos.js';
 import { evaluarPaciente } from '../engine/evaluar.js';
 import { ACTIVIDAD } from '../engine/anthro.js';
 import { guardarClinica, actualizarPerfil, backend } from '../data/servicio.js';
@@ -111,6 +111,9 @@ export function formularioDatos({ uid, perfil, clinica, quien, onGuardado, titul
     h('h4.sub', 'Otras'), toggleFichas(PAT.otras, w.patologias),
     h('h4.sub', 'Importantes para la medicación ', h('span.chip.chip--peligro', 'revisar')), toggleFichas(PAT.importantes, w.patologias),
     p.sexo === 'F' ? [h('h4.sub', 'Embarazo'), toggleFichas(PAT.mujer, w.patologias)] : null,
+    h('h4.sub', 'Otras enfermedades ', h('span.chip.chip--info', 'texto libre')),
+    h('p.ayuda', 'Si no está en la lista, escribila. Si la app la reconoce, la tiene en cuenta en la medicación, la alimentación y la actividad; si no, la revisa tu médico.'),
+    editorEnfermedades(w.patologiasExtra || [], (v) => { w.patologiasExtra = v; marcar(); }),
     h('h4.sub', 'Síntomas'), toggleFichas(SINT, w.sintomas),
     h('h4.sub', 'Familiares'), toggleFichas(FAM, fam),
     h('div.campo', h('label', 'Diabetes en la familia'), segmentado([{ valor: 'no', texto: 'No' }, { valor: '2grado', texto: 'Abuelos, tíos o primos' }, { valor: '1grado', texto: 'Padres, hermanos o hijos' }], fam.dm2 || 'no', (v) => { fam.dm2 = v; marcar(); }, { etiqueta: 'Diabetes en la familia', pequeno: true })));
@@ -126,7 +129,10 @@ export function formularioDatos({ uid, perfil, clinica, quien, onGuardado, titul
   const lpaUnidad = h('div.campo', h('label', 'Unidad de Lp(a)'), segmentado([{ valor: 'mg', texto: 'mg/dL' }, { valor: 'nmol', texto: 'nmol/L' }], w.labs.lpaUnidad || 'mg', (v) => { w.labs.lpaUnidad = v; marcar(); }, { pequeno: true }));
   const laboratorio = tarjeta('Laboratorio', { icono: 'matraz' },
     h('p.ayuda', 'Copiá los valores de tu último análisis. Lo que no tengas, dejalo vacío.'),
-    h('div.grid-form', fechaLab, ...LABS.map(([k, etq, u]) => num(w.labs, k, etq, u)), lpaUnidad));
+    h('div.grid-form', fechaLab, ...LABS.map(([k, etq, u]) => num(w.labs, k, etq, u)), lpaUnidad),
+    h('h4.sub', 'Otros análisis ', h('span.chip.chip--info', 'vitamina D, ferritina, calcitonina, lipasa…')),
+    h('p.ayuda', 'Agregá cualquier otro valor. Los que la app reconoce se interpretan solos; para los demás, cargá el rango de referencia que figura en tu informe.'),
+    editorAnalisis(w.labsExtra || [], (v) => { w.labsExtra = v; marcar(); }));
 
   /* --- Guardado --- */
   const form = h('form.form-datos', { novalidate: true },

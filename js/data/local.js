@@ -390,6 +390,8 @@ export async function cambiarCorreo(clave, nuevo) {
   return { inmediato: true };
 }
 export const usuario = () => publico();
+/** En la demo no hay servidor de IA. */
+export async function analizarIA() { throw Object.assign(new Error('sin servidor'), { code: 'ia/sin-servidor' }); }
 
 /* ---------- Atajos de la demo ---------- */
 export async function entrarComo(uid, email, paciente = false) {

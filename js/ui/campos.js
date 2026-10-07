@@ -6,6 +6,7 @@
 import { h } from '../core/dom.js';
 import { icono } from '../core/iconos.js';
 import { buscar, reconocer, CLASES } from '../engine/meds.js';
+import { sugerirEnfermedades, buscarEnfermedad, sugerirAnalitos, buscarAnalito } from '../engine/conocimiento.js';
 
 let n = 0;
 const id = (p) => `${p}-${++n}`;
@@ -131,7 +132,7 @@ export function editorMeds(lista = [], onChange) {
   const pintar = () => {
     ul.replaceChildren(...meds.map((m, i) => h('li.med',
       h('span.med-ico', icono('pildora', { tam: 16 })),
-      h('div.med-txt', h('strong', m.nombre), h('small', (m.clases || []).map((c) => CLASES[c] || c).join(' · ') || 'Sin clase reconocida')),
+      h('div.med-txt', h('strong', m.nombre), h('small', (m.clases || []).map((c) => CLASES[c] || c).join(' · ') || (reconocer(m.nombre) ? 'Reconocido · sin interacciones relevantes' : 'No reconocido: lo revisa el médico'))),
       h('button.btn-icono', { type: 'button', 'aria-label': `Quitar ${m.nombre}`, onclick: () => { meds.splice(i, 1); pintar(); emitir(); } }, icono('basura', { tam: 16 })))));
     if (!meds.length) ul.append(h('li.med.med--vacio', 'Sin medicación cargada'));
   };
@@ -155,4 +156,50 @@ export function editorMeds(lista = [], onChange) {
     h('div.meds-nueva', h('div.meds-buscar', icono('buscar', { tam: 16 }), entrada), dosis,
       h('button.btn.btn--suave', { type: 'button', onclick: () => agregar(entrada.value.trim()) }, icono('mas', { tam: 16 }), 'Agregar')),
     sugerencias);
+}
+
+/** Otras enfermedades en texto libre, con sugerencias de la base de conocimiento. */
+export function editorEnfermedades(lista = [], onChange) {
+  let items = lista.map((x) => ({ ...x }));
+  const fichasEl = h('div.fichas');
+  const entrada = h('input', { type: 'text', placeholder: 'Escribí una enfermedad (ej.: gota, reflujo, nódulo tiroideo…)', autocomplete: 'off', 'aria-label': 'Agregar otra enfermedad' });
+  const sug = h('ul.sugerencias');
+  const emitir = () => onChange?.(items.map((x) => ({ ...x })));
+  const pintar = () => fichasEl.replaceChildren(...items.map((x, i) => {
+    const e = buscarEnfermedad(x.texto);
+    return h(`span.chip.${e ? 'chip--info' : 'chip--aviso'}`, { title: e ? `Reconocida: ${e.nombre}` : 'No reconocida: la revisa el médico' }, e ? icono('ok', { tam: 13 }) : icono('alerta', { tam: 13 }), x.texto,
+      h('button.btn-chip', { type: 'button', 'aria-label': `Quitar ${x.texto}`, onclick: () => { items.splice(i, 1); pintar(); emitir(); } }, '×'));
+  }));
+  const agregar = (texto) => {
+    const t = String(texto || '').trim().slice(0, 80);
+    if (!t || items.some((x) => x.texto.toLowerCase() === t.toLowerCase())) return;
+    items.push({ texto: t }); entrada.value = ''; sug.replaceChildren(); pintar(); emitir();
+  };
+  entrada.addEventListener('input', () => sug.replaceChildren(...sugerirEnfermedades(entrada.value).map((e) => h('li', h('button', { type: 'button', onclick: () => agregar(e.nombre) }, h('strong', e.nombre), e.glp1 ? h('small', 'influye en la medicación') : null)))));
+  entrada.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); agregar(entrada.value); } });
+  pintar();
+  return h('div.editor-extra', fichasEl, h('div.meds-nueva.meds-nueva--2', h('div.meds-buscar', icono('buscar', { tam: 16 }), entrada), h('button.btn.btn--suave', { type: 'button', onclick: () => agregar(entrada.value) }, icono('mas', { tam: 16 }), 'Agregar')), sug);
+}
+
+/** Otros análisis: nombre, valor, unidad y (si no lo reconoce la app) rango de referencia. */
+export function editorAnalisis(lista = [], onChange) {
+  let filas = lista.map((x) => ({ ...x }));
+  const cuerpo = h('div.analisis-lista');
+  const emitir = () => onChange?.(filas.filter((f) => f.nombre && f.valor !== '').map((f) => ({ ...f })));
+  const fila = (f, i) => {
+    const a = buscarAnalito(f.nombre);
+    const inp = (k, ph, props = {}) => { const el = h('input', { type: 'text', value: f[k] ?? '', placeholder: ph, 'aria-label': ph, ...props }); el.addEventListener('input', () => { f[k] = el.value; if (k === 'nombre') { estado.replaceChildren(marca()); if (!f.unidad && buscarAnalito(el.value)) { f.unidad = buscarAnalito(el.value).unidad; uni.value = f.unidad; } } emitir(); }); return el; };
+    const marca = () => (buscarAnalito(f.nombre) ? h('span.chip.chip--info', icono('ok', { tam: 12 }), 'Reconocido') : f.nombre ? h('span.chip.chip--aviso', 'Sin interpretar: cargá la referencia') : null);
+    const estado = h('span.analisis-estado', marca());
+    const uni = inp('unidad', 'Unidad');
+    return h('div.analisis-fila',
+      inp('nombre', 'Análisis (ej.: vitamina D)', { list: 'analitos-lista' }), inp('valor', 'Valor', { inputmode: 'decimal' }), uni,
+      inp('refMin', 'Ref. mín.', { inputmode: 'decimal' }), inp('refMax', 'Ref. máx.', { inputmode: 'decimal' }), estado,
+      h('button.btn-icono', { type: 'button', 'aria-label': 'Quitar análisis', onclick: () => { filas.splice(i, 1); pintar(); emitir(); } }, icono('basura', { tam: 16 })));
+  };
+  const pintar = () => cuerpo.replaceChildren(...filas.map(fila));
+  const datalist = h('datalist#analitos-lista', ...sugerirAnalitos('a', 99).concat(sugerirAnalitos('e', 99), sugerirAnalitos('o', 99)).filter((x, i, arr) => arr.indexOf(x) === i).map((x) => h('option', { value: x.nombre })));
+  pintar();
+  return h('div.editor-extra', datalist, cuerpo,
+    h('button.btn.btn--suave', { type: 'button', onclick: () => { filas.push({ nombre: '', valor: '', unidad: '' }); pintar(); cuerpo.lastChild?.querySelector('input')?.focus(); } }, icono('mas', { tam: 16 }), 'Agregar otro análisis'));
 }
