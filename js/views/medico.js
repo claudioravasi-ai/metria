@@ -13,6 +13,8 @@ import { edad as calcEdad } from '../engine/anthro.js';
 import * as GL from '../engine/glp1.js';
 import { backend, purgarVencidos, purgarRetencion, verificarIdentidad, guardarNota, editarPacienteMedico, borrarPaciente } from '../data/servicio.js';
 import { vistaEndoMedico } from './endoscopia.js';
+import { prioridadPaciente, NIVELES } from '../engine/prioridad.js';
+import { CATEGORIAS as RIESGO_ENDO } from '../engine/vigilancia.js';
 import { campo, segmentado } from '../ui/campos.js';
 import { marco, barraDemo, ambiente } from './shell.js';
 import { inclinar } from '../ui/efectos.js';
@@ -36,15 +38,15 @@ const PESTANAS = [
 
 export function appMedico(perfil, { onSalir }) {
   const B = backend();
-  const S = { indice: {}, solicitudes: {}, medicos: {}, estados: {}, ficha: null, filtro: 'todos', busqueda: '', endo: { config: null, agenda: {}, ocupacion: {}, turnos: {}, esperas: {} } };
+  const S = { indice: {}, solicitudes: {}, medicos: {}, estados: {}, ficha: null, filtro: 'prioridad', busqueda: '', endo: { config: null, agenda: {}, ocupacion: {}, turnos: {}, esperas: {}, envios: {} } };
   const bajas = [];
   let bajasFicha = [];
   let form = null, programado = false;
 
   const items = () => [
     { id: 'panel' }, { id: 'pacientes', badge: null },
-    { id: 'endoscopia', badge: Object.values(S.endo.turnos).flatMap((l) => Object.values(l || {})).filter((t) => t.estado === 'suspendido').length || null },
-    ...(perfil.titular ? [{ id: 'medicos', badge: Object.values(S.estados).filter((e) => e === 'pendiente').length || null }] : []),
+    { id: 'endoscopia', badge: (Object.values(S.endo.turnos).flatMap((l) => Object.values(l || {})).filter((t) => t.estado === 'suspendido').length + Object.values(S.endo.envios || {}).filter((e) => e.estado === 'pendiente').length) || null },
+    ...(perfil.titular ? [{ id: 'medicos', badge: Object.entries(S.estados).filter(([uid, e]) => e === 'pendiente' && uid !== perfil.uid).length || null }] : []),
     { id: 'privacidad', nombre: 'Mi cuenta' }, { id: 'ayuda' },
   ];
   const ruta = () => {
@@ -68,10 +70,11 @@ export function appMedico(perfil, { onSalir }) {
 
   bajas.push(B.escuchar('indice', (v) => { S.indice = v || {}; if (!S.ficha) programar(); }));
   // Endoscopia: configuración, agenda, cupos y todos los turnos (en vivo)
-  const endoVivo = () => { if (ruta().sec === 'endoscopia' || ruta().sec === 'panel') programar(); };
+  const endoVivo = () => { if (['endoscopia', 'panel'].includes(ruta().sec) || (ruta().sec === 'pacientes' && !S.ficha)) programar(); };
   bajas.push(B.escuchar('endoConfig', (v) => { S.endo.config = v; endoVivo(); }));
   bajas.push(B.escucharDesde('agendaEndo', hoyISO(B.ahora()), (v) => { S.endo.agenda = v || {}; endoVivo(); }));
   bajas.push(B.escucharDesde('ocupacionEndo', hoyISO(B.ahora()), (v) => { S.endo.ocupacion = v || {}; endoVivo(); }));
+  bajas.push(B.escuchar('enviosEndo', (v) => { S.endo.envios = v || {}; endoVivo(); }));
   bajas.push(B.escuchar('esperaEndo', (v) => { S.endo.esperas = v || {}; endoVivo(); }));
   bajas.push(B.escuchar('turnosEndo', (v) => { S.endo.turnos = v || {}; endoVivo(); }));
   bajas.push(B.escuchar('solicitudes', (v) => { S.solicitudes = v || {}; if (ruta().sec === 'panel') programar(); }));
@@ -143,12 +146,21 @@ export function appMedico(perfil, { onSalir }) {
     if (mismo) window.scrollTo(0, scroll); else window.scrollTo(0, 0);
   }
 
+  /* ---------- Prioridad endoscópica (criterios publicados; ver engine/prioridad.js) ---------- */
+  const prioridades = () => Object.fromEntries(Object.entries(S.indice).map(([uid, fila]) => [uid,
+    prioridadPaciente({ fila, turnos: S.endo.turnos?.[uid], espera: S.endo.esperas?.[uid], ahora: B.ahora() })]));
+  const chipPrioridad = (pr) => (pr.nivel ? chip(NIVELES[pr.nivel].corto, NIVELES[pr.nivel].tono, 'endoscopio') : null);
+  const chipRiesgo = (pr) => (pr.riesgo ? chip(RIESGO_ENDO[pr.riesgo].nombre, RIESGO_ENDO[pr.riesgo].tono, 'escudo') : null);
+
   /* ---------- Panel ---------- */
   function vistaPanel() {
     const filas = Object.values(S.indice);
     const cuenta = (f) => filas.filter(f).length;
-    const altos = cuenta((p) => ['alto', 'muy-alto'].includes(p.riesgo));
-    const cand = cuenta((p) => ['indicado', 'precaucion'].includes(p.glp1));
+    const PR = prioridades();
+    filas.forEach((p) => { p._prio = null; });
+    Object.entries(S.indice).forEach(([uid, p]) => { p._prio = String(PR[uid]?.nivel ?? 0); p._riesgoEndo = PR[uid]?.riesgo || 'sin'; });
+    const urgentes = cuenta((p) => ['1', '2'].includes(p._prio));
+    const altos = cuenta((p) => ['alto', 'muy-alto'].includes(p._riesgoEndo));
     const pend = Object.entries(S.solicitudes).flatMap(([uid, s]) => Object.entries(s || {}).filter(([, x]) => x.estado === 'pendiente').map(([id, x]) => ({ uid, id, ...x })));
     const kpi = (id, t, v, sub, onclick) => inclinar(h('button.kpi-tile', { type: 'button', style: estiloSeccion(id), onclick },
       h('span.tile-ico', icono(SECCIONES[id].icono, { tam: 20 })), h('small', t), h('strong.num', String(v)), h('em', sub)), 5);
@@ -161,7 +173,7 @@ export function appMedico(perfil, { onSalir }) {
     };
     const imcCat = (v) => (!v ? null : v < 18.5 ? 'bajo' : v < 25 ? 'normal' : v < 30 ? 'sobrepeso' : v < 35 ? 'ob1' : v < 40 ? 'ob2' : 'ob3');
     filas.forEach((p) => { p._imc = imcCat(p.imc); });
-    const esperan = perfil.titular ? Object.entries(S.estados).filter(([, e]) => e === 'pendiente').map(([uid]) => S.medicos[uid]).filter(Boolean) : [];
+    const esperan = perfil.titular ? Object.entries(S.estados).filter(([uid, e]) => e === 'pendiente' && uid !== perfil.uid).map(([uid]) => S.medicos[uid]).filter(Boolean) : [];
     return h('div.seccion',
       heroe('panel', `Hola, ${perfil.datos.nombre}`, perfil.titular ? 'Coordinación · indicadores del consultorio en vivo' : 'Indicadores del consultorio, actualizados en vivo'),
       esperan.length ? h('section.card.card--alerta-pro', { style: estiloSeccion('medicos') },
@@ -171,13 +183,13 @@ export function appMedico(perfil, { onSalir }) {
           h('button.btn.btn--primario', { type: 'button', onclick: () => ir('medicos') }, 'Revisar'))) : null,
       h('div.kpis',
         kpi('pacientes', 'Pacientes', filas.length, 'registrados', () => ir('pacientes')),
-        kpi('corazon', 'Riesgo alto o muy alto', altos, 'cardiovascular', () => { S.filtro = 'riesgo'; ir('pacientes'); }),
-        kpi('tratamiento', 'Candidatos GLP-1', cand, 'según el motor', () => { S.filtro = 'glp1'; ir('pacientes'); }),
+        kpi('endoscopia', 'Prioridad urgente o alta', urgentes, 'VEDA / VCC pendientes', () => { S.filtro = 'prioridad'; ir('pacientes'); }),
+        kpi('estudios', 'Riesgo endoscópico alto', altos, 'según el último informe', () => { S.filtro = 'riesgoEndo'; ir('pacientes'); }),
         kpi('privacidad', 'Pedidos de pacientes', pend.length, 'acceso, rectificación, baja', null)),
       h('div.grid-2',
-        tarjeta('Riesgo cardiovascular', { icono: 'corazon', seccion: 'corazon' }, dist('riesgo', ['muy-alto', 'alto', 'intermedio', 'limite', 'bajo'],
-          { 'muy-alto': 'Muy alto', alto: 'Alto', intermedio: 'Intermedio', limite: 'Limítrofe', bajo: 'Bajo' },
-          { 'muy-alto': '#be123c', alto: '#ef4444', intermedio: '#f97316', limite: '#eab308', bajo: '#22c55e' })),
+        tarjeta('Prioridad endoscópica', { icono: 'endoscopio', seccion: 'endoscopia' }, dist('_prio', ['1', '2', '3', '0'],
+          { 1: 'Urgente (≤ 2 sem.)', 2: 'Alta (≤ 6 sem.)', 3: 'Programada (≤ 1 año)', 0: 'Sin prioridad' },
+          { 1: '#be123c', 2: '#f97316', 3: '#eab308', 0: '#94a3b8' })),
         tarjeta('Índice de masa corporal', { icono: 'cuerpo', seccion: 'cuerpo' }, dist('_imc', ['bajo', 'normal', 'sobrepeso', 'ob1', 'ob2', 'ob3'],
           { bajo: 'Bajo peso', normal: 'Normal', sobrepeso: 'Sobrepeso', ob1: 'Obesidad I', ob2: 'Obesidad II', ob3: 'Obesidad III' },
           { bajo: '#38bdf8', normal: '#22c55e', sobrepeso: '#eab308', ob1: '#f97316', ob2: '#ef4444', ob3: '#be123c' }))),
@@ -196,26 +208,37 @@ export function appMedico(perfil, { onSalir }) {
   function vistaPacientes() {
     const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
     const lista = h('div.lista-pacientes');
-    const filtros = [['todos', 'Todos'], ['riesgo', 'Riesgo alto'], ['glp1', 'Candidatos GLP-1'], ['incompletos', 'Ficha incompleta']];
+    const filtros = [['prioridad', 'Por prioridad endoscópica'], ['riesgoEndo', 'Riesgo endoscópico alto'], ['todos', 'Todos (A-Z)'], ['incompletos', 'Ficha incompleta']];
+    const PR = prioridades();
     const pintar = () => {
       const q = norm(S.busqueda);
       const filas = Object.entries(S.indice)
         .filter(([, p]) => !q || norm(p.n).includes(q) || (p.d3 && p.d3 === q.replace(/\D/g, '').slice(-3) && q.replace(/\D/g, '').length === 3))
-        .filter(([, p]) => S.filtro === 'todos' || (S.filtro === 'riesgo' && ['alto', 'muy-alto'].includes(p.riesgo)) || (S.filtro === 'glp1' && ['indicado', 'precaucion'].includes(p.glp1)) || (S.filtro === 'incompletos' && (p.completo ?? 0) < 60))
+        .filter(([uid, p]) => ['todos', 'prioridad'].includes(S.filtro) || (S.filtro === 'riesgoEndo' && ['alto', 'muy-alto'].includes(PR[uid]?.riesgo)) || (S.filtro === 'incompletos' && (p.completo ?? 0) < 60))
         .sort((a, b) => a[1].n.localeCompare(b[1].n, 'es'));
-      lista.replaceChildren(...(filas.length ? filas.map(([uid, p]) => {
+      const fila = ([uid, p]) => {
         const e = calcEdad(p.nac, new Date(B.ahora()));
-        const ri = RIESGO[p.riesgo], gl = GLP[p.glp1];
+        const pr = PR[uid] || {};
         return h('button.pac', { type: 'button', onclick: () => abrirFicha(uid) },
           h('span.avatar', p.n.split(', ').reverse().map((x) => x[0]).join('').slice(0, 2)),
           h('div.pac-nombre', h('strong', p.n), h('small', `${e ?? '—'} años · ${p.sx === 'M' ? 'Varón' : 'Mujer'} · DNI ${dniMascara(p.d3)}`)),
           h('div.pac-datos',
             h('span.pac-dato', h('small', 'IMC'), h('strong.num', p.imc ? fmt(p.imc, 1) : '—')),
-            ri ? chip(ri[0], ri[1], 'corazon') : chip('Riesgo s/d', 'neutro'),
-            gl ? chip(gl[0], gl[1], 'jeringa') : null,
+            chipPrioridad(pr), chipRiesgo(pr),
+            pr.proximo ? h('small.pac-prox', `Próx.: ${new Date(`${pr.proximo.fecha}T12:00:00`).toLocaleDateString('es-AR', { month: 'short', year: 'numeric' })}`) : null,
             h('span.pac-comp', { title: 'Ficha completa' }, h('i', { style: { width: `${p.completo ?? 0}%` } }))),
-          icono('chevron', { tam: 18, clase: 'pac-ir' }));
-      }) : [vacio('buscar', 'Sin resultados', S.busqueda ? 'Probá con otro apellido o con los 3 últimos dígitos del DNI.' : 'Todavía no hay pacientes registrados.')]));
+          icono('chevron', { tam: 18, clase: 'pac-ir' }),
+          S.filtro === 'prioridad' && pr.motivos?.length ? h('ul.pac-motivos', ...pr.motivos.slice(0, 3).map((m) => h('li', m))) : null);
+      };
+      if (S.filtro === 'prioridad' && filas.length) {
+        const grupos = [1, 2, 3, 0].map((n) => ({ n, filas: filas.filter(([uid]) => (PR[uid]?.nivel || 0) === n) })).filter((g) => g.filas.length);
+        lista.replaceChildren(...grupos.map((g) => h('section.grupo-prio', { style: { '--c1': NIVELES[g.n].c1, '--c2': NIVELES[g.n].c2 } },
+          h('header.grupo-prio-cab', h('strong', NIVELES[g.n].nombre), NIVELES[g.n].plazo ? h('small', `Estudio ${NIVELES[g.n].plazo}`) : null, h('span.num', String(g.filas.length))),
+          ...g.filas.map(fila))),
+          h('p.ayuda.criterios-prio', 'Criterios: síntomas de alarma según NICE NG12 / BSG (sangrado, anemia ferropénica, disfagia o vómitos: dentro de 2 semanas); lesión sospechosa del informe; vigilancia según ESGE 2020 (colon), ESGE 2023 (Barrett) y MAPS III 2025 (estómago); rastreo de cáncer colorrectal 50-75 años (Programa Nacional y ESGE; USMSTF desde 45). Orientativo: la decisión es del médico.'));
+        return;
+      }
+      lista.replaceChildren(...(filas.length ? filas.map(fila) : [vacio('buscar', 'Sin resultados', S.busqueda ? 'Probá con otro apellido o con los 3 últimos dígitos del DNI.' : 'Todavía no hay pacientes registrados.')]));
     };
     const buscador = h('input', { type: 'search', placeholder: 'Buscar por apellido, nombre o 3 últimos dígitos del DNI', value: S.busqueda, 'aria-label': 'Buscar paciente' });
     buscador.addEventListener('input', () => { S.busqueda = buscador.value; pintar(); });

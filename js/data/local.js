@@ -135,8 +135,9 @@ function puedeLeer(ruta) {
   if (!sesion) return false;
   const med = r.tipo === 'medico' && r.aprobado;
   switch (a) {
-    case 'endoConfig': case 'agendaEndo': case 'ocupacionEndo': return true;
+    case 'endoConfig': case 'agendaEndo': case 'ocupacionEndo': case 'esperaAnon': return true;
     case 'turnosEndo': case 'esperaEndo': return med || (b === sesion.uid);
+    case 'enviosEndo': return med;
     case 'medicos': return b === sesion.uid || r.titular || (med && !!b);
     case 'medicosEstado': return b === sesion.uid || r.titular;
     case 'indice': case 'estudiosVenc': case 'solicitudesTodas': return med;
@@ -164,6 +165,8 @@ function puedeEscribir(ruta, valor) {
   switch (a) {
     case 'endoConfig': case 'agendaEndo': return med;
     case 'esperaEndo': return med || propio;
+    case 'enviosEndo': return med || (!!valor && !c && !arbol.enviosEndo?.[b] && valor.pac === sesion.uid && valor.estado === 'pendiente');
+    case 'esperaAnon': return med || (valor !== null && !arbol.esperaAnon?.[b]) || (valor === null && arbol.esperaEndo?.[sesion.uid]?.anon === b);
     case 'ocupacionEndo': {
       // un cupo se toma solo si está libre; el paciente solo libera los cupos de sus turnos
       if (med) return true;

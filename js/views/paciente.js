@@ -29,7 +29,7 @@ const PRINCIPALES = ['inicio', 'endoscopia', 'estudios', 'cuerpo'];
 export function appPaciente(perfil, { onSalir }) {
   const B = backend();
   const uid = perfil.uid;
-  const S = { perfil: perfil.datos, pac: {}, estudios: {}, auditoria: {}, verificado: null, listo: { pac: false, est: false }, turnos: {}, endoConfig: null, agenda: {}, ocupacion: {}, espera: null };
+  const S = { perfil: perfil.datos, pac: {}, estudios: {}, auditoria: {}, verificado: null, listo: { pac: false, est: false }, turnos: {}, endoConfig: null, agenda: {}, ocupacion: {}, espera: null, esperaAnon: {} };
   let form = null, pendiente = false, programado = false, inicioVisto = false;
   const bajas = [];
 
@@ -58,6 +58,7 @@ export function appPaciente(perfil, { onSalir }) {
   // Turnos de endoscopia: los del paciente, la configuración y las fechas abiertas (sin datos de otros pacientes)
   bajas.push(B.escuchar(`turnosEndo/${uid}`, (v) => { S.turnos = v || {}; if (['endoscopia', 'inicio'].includes(seccion())) programar(); }));
   bajas.push(B.escuchar(`esperaEndo/${uid}`, (v) => { S.espera = v; if (['endoscopia', 'inicio'].includes(seccion())) programar(); }));
+  bajas.push(B.escuchar('esperaAnon', (v) => { S.esperaAnon = v || {}; if (seccion() === 'endoscopia') programar(); }));
   bajas.push(B.escuchar('endoConfig', (v) => { S.endoConfig = v; if (seccion() === 'endoscopia') programar(); }));
   bajas.push(B.escucharDesde('agendaEndo', hoyISO(B.ahora()), (v) => { S.agenda = v || {}; if (seccion() === 'endoscopia') programar(); }));
   bajas.push(B.escucharDesde('ocupacionEndo', hoyISO(B.ahora()), (v) => { S.ocupacion = v || {}; if (seccion() === 'endoscopia') programar(); }));
@@ -98,7 +99,7 @@ export function appPaciente(perfil, { onSalir }) {
       case 'plan': contenido = vistaPlan(ev, { rol: 'paciente' }); break;
       case 'tratamiento': contenido = vistaTratamientoPaciente({ ev, plan: S.pac.plan, tolerancia: S.pac.tolerancia, uid }); break;
       case 'estudios': contenido = vistaEstudiosPaciente({ uid, estudios: S.estudios }); break;
-      case 'endoscopia': contenido = vistaEndoPaciente({ uid, perfil: S.perfil, pac: S.pac, turnos: S.turnos, config: S.endoConfig, agenda: S.agenda, ocupacion: S.ocupacion, espera: S.espera, render: programar }); break;
+      case 'endoscopia': contenido = vistaEndoPaciente({ uid, perfil: S.perfil, pac: S.pac, turnos: S.turnos, config: S.endoConfig, agenda: S.agenda, ocupacion: S.ocupacion, espera: S.espera, esperaAnon: S.esperaAnon, render: programar }); break;
       case 'privacidad': contenido = vistaPrivacidad({ uid, perfil: S.perfil, auditoria: S.auditoria, estudios: S.estudios }); break;
       case 'ayuda': contenido = vistaManual('paciente'); break;
       default: contenido = inicio(ev);

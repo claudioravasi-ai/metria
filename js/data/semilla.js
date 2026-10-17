@@ -248,12 +248,27 @@ export async function construirSemilla(ahora) {
   arbol.turnosEndo = { [pac2.uid]: { [tid]: {
     codigo: 'MTR-DEMA-2X7K', tipo: 'doble', fecha: dias[0], hora: '0900', cupos: ['0900', '0930'], estado: 'confirmado', reprogramaciones: 0,
     paciente: { n: `${pac2.perfil.apellido}, ${pac2.perfil.nombre}`, d3: pac2.perfil.dni.slice(-3) },
-    datos: { cobertura: 'OSDE', afiliado: '61 234567 8 01', telefono: '11 5555-0202', acompNombre: 'María (esposa)', acompTel: '11 5555-0909', motivo: 'control', motivoTexto: '', derivante: '', peso: 113, talla: 176, alergias: '', medicacion: 'Metformina, enalapril', antecedentes: { antidiabeticos: true, apnea: true } },
+    datos: { cobertura: 'OSDE', afiliado: '61 234567 8 01', telefono: '11 5555-0202', acompNombre: 'María (esposa)', acompTel: '11 5555-0909', motivo: 'anemia', motivoTexto: 'Anemia ferropénica en el último análisis', derivante: '', peso: 113, talla: 176, alergias: '', medicacion: 'Metformina, enalapril', antecedentes: { antidiabeticos: true, apnea: true } },
     pre: { analitica: { tiene: true, fecha: new Date(t - 10 * MS_DIA).toISOString().slice(0, 10) }, ecg: { tiene: true, fecha: new Date(t - 20 * MS_DIA).toISOString().slice(0, 10), informe: true }, anestesia: { tiene: true, fecha: new Date(t - 5 * MS_DIA).toISOString().slice(0, 10), apto: true } },
     alertas: [], consentimiento: { aceptado: true, version: 'endo-2026-10', fecha: t - MS_DIA, firma: null, aclaracion: `${pac2.perfil.nombre} ${pac2.perfil.apellido}` },
     medico: 'Dra. Ana Demo', creado: t - MS_DIA, historial: { [id()]: { cuando: t - MS_DIA, que: 'Turno otorgado y confirmado', por: 'paciente' } },
   } } };
-  arbol.estadoTurno = { 'MTR-DEMA-2X7K': { t: tid, estado: 'confirmado', tipo: 'doble', fecha: dias[0], hora: '0900', reprogramaciones: 0, actualizado: t - MS_DIA } };
+  // Endoscopia alta de hace 3 años y medio con Barrett de 4 cm (control a los 3 años: vencido)
+  const fVieja = new Date(t - 1280 * MS_DIA).toISOString().slice(0, 10);
+  const infVieja = { alta: { barrett: true, barrettC: 2, barrettM: 4, barrettDisplasia: 'sin' }, baja: {}, biopsias: true, histoCargada: true, texto: 'Barrett C2M4 sin displasia en las biopsias.' };
+  const { evaluarVigilancia } = await import('../engine/vigilancia.js');
+  arbol.turnosEndo['demo-pac-1'] = { demoVieja01: {
+    codigo: 'MTR-HIST-4BX2', tipo: 'veda', fecha: fVieja, hora: '0830', cupos: ['0830'], estado: 'realizado', reprogramaciones: 0,
+    paciente: { n: 'Gómez, Laura', d3: '456' }, datos: { motivo: 'acidez', antecedentes: {} }, pre: {}, alertas: [],
+    informe: { ...infVieja, resultado: JSON.parse(JSON.stringify(evaluarVigilancia('veda', infVieja, { edad: 43, fechaEstudio: fVieja }))), fecha: t - 1270 * MS_DIA },
+    creado: t - 1300 * MS_DIA, historial: { [id()]: { cuando: t - 1280 * MS_DIA, que: 'Estudio realizado: informe y próximo control cargados', por: 'consultorio' } },
+  } };
+  arbol.estadoTurno = { 'MTR-HIST-4BX2': { t: 'demoVieja01', estado: 'realizado', tipo: 'veda', fecha: fVieja, hora: '0830', reprogramaciones: 0, actualizado: t - 1270 * MS_DIA },
+    'MTR-DEMA-2X7K': { t: tid, estado: 'confirmado', tipo: 'doble', fecha: dias[0], hora: '0900', reprogramaciones: 0, actualizado: t - MS_DIA } };
+
+  // Lista de espera de ejemplo (con su copia anónima)
+  arbol.esperaEndo = { 'demo-pac-3': { tipo: 'vcc', antesDe: null, turno: null, creado: t - 3 * MS_DIA, anon: 'anonDemo0001' } };
+  arbol.esperaAnon = { anonDemo0001: { tipo: 'vcc', creado: t - 3 * MS_DIA } };
 
   arbol.solicitudes = { 'demo-pac-3': { [id()]: { tipo: 'rectificacion', texto: 'Mi teléfono cambió: 11 5555-0303.', cuando: t - MS_DIA, estado: 'pendiente' } } };
   // Cuentas de pacientes de ejemplo: entran con código (sin contraseña)

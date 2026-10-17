@@ -90,7 +90,7 @@ function selloConsentimiento(t) {
     h('div.sello-cab', icono('escudo', { tam: 18 }), h('strong', 'Firmado electrónicamente con huella digital')),
     h('dl',
       h('div', h('dt', 'Fecha y hora (servidor)'), h('dd', fechaHora(c.fecha))),
-      h('div', h('dt', 'Firmó'), h('dd', c.aclaracion || '—')),
+      h('div', h('dt', 'Firmó'), h('dd', `${c.aclaracion || '—'}${c.metodo ? ` · ${c.metodo === 'teclado' ? 'firma escrita con el teclado' : 'firma manuscrita (dedo, lápiz o mouse)'}` : ''}`)),
       h('div', h('dt', `Huella ${c.algoritmo || 'SHA-256'}`), h('dd.num.sello-hash', c.huella))),
     h('div.botones', btn, res));
 }
@@ -100,7 +100,8 @@ function textoConsentimiento(docs) {
 }
 
 /** Correo del turno: en producción lo manda el servidor; en la demo se muestra. */
-async function mandarCorreo({ tipo, uid, t, id, docs, ordenes, paciente, config, email }) {
+/** Arma las secciones de texto que recibe el paciente (correo, PDF y Word). */
+function seccionesDe({ docs, ordenes, t }) {
   const secciones = [];
   if (docs) {
     secciones.push(['Tu estudio', docs.resumen]);
@@ -109,6 +110,15 @@ async function mandarCorreo({ tipo, uid, t, id, docs, ordenes, paciente, config,
     secciones.push(['Consentimiento informado (firmado en la app)', [...docs.consentimiento.map(([a, b]) => `${a}: ${b}`), ...(t?.consentimiento?.huella ? [`Huella digital SHA-256 del consentimiento firmado: ${t.consentimiento.huella}`] : [])]]);
   }
   if (ordenes) ordenes.forEach((o) => secciones.push([`Orden: ${o.titulo}`, [...o.rp.map((x) => `Rp/ ${x}`), `Diagnóstico: ${o.dx}`]]));
+  return secciones;
+}
+
+/**
+ * Prepara el correo al paciente. Si el médico pidió revisar los envíos (Configuración), queda en
+ * Endoscopia → Envíos para verlo en PDF o Word, editarlo y aprobarlo; si no, sale directo.
+ */
+async function mandarCorreo({ tipo, uid, t, id, docs, ordenes, paciente, config, email, directo = false }) {
+  const secciones = seccionesDe({ docs, ordenes, t });
   const cfg = D.configCompleta(config);
   const datos = {
     tipo, pac: uid, turno: id || null, codigo: t?.codigo || null, secciones,
@@ -116,11 +126,52 @@ async function mandarCorreo({ tipo, uid, t, id, docs, ordenes, paciente, config,
     qr: t ? await qrPNG(urlTurno(t.codigo)).catch(() => null) : null,
     medico: ordenes ? { nombre: cfg.medico.nombre, matricula: cfg.medico.matricula } : null,
   };
+  if (cfg.revisarEnvios !== false && ['turno', 'ordenes', 'reprogramado'].includes(tipo) && !directo) {
+    try { await D.encolarEnvio({ ...datos, paciente: paciente || null, email: email || null }); }
+    catch (e) { console.warn(e); toast('No se pudo preparar el envío', 'error'); return { error: true }; }
+    toast(B().usuario()?.paciente ? 'Tu médico revisa la documentación y te la manda por correo.' : 'Quedó en Endoscopia → Envíos para que lo revises y lo apruebes.', 'info', 6000);
+    return { enCola: true };
+  }
   const r = await D.enviarCorreo(datos).catch((e) => { console.warn(e); return { error: true }; });
   if (r?.demo) buzonDemo({ tipo, t, secciones, paciente, config, email });
   else if (r?.error) toast('No se pudo enviar el correo ahora. Lo podés reenviar desde tu turno.', 'error', 6000);
   else toast('Te lo mandamos a tu correo', 'ok');
   return r;
+}
+
+/* ======================= DOCUMENTO PARA REVISAR (PDF y Word) ======================= */
+const TIT_ENVIO = { turno: 'Confirmación del turno, preparación y consentimiento', ordenes: 'Órdenes del prequirúrgico', reprogramado: 'Turno reprogramado: preparación y consentimiento', recordatorio: 'Recordatorio 48 h antes', espera: 'Aviso de lugar libre (lista de espera)' };
+const ICONO_SEC = (t) => (/^Tu estudio/.test(t) ? '🩺' : /^Preparación/.test(t) ? '🥤' : /^Recomendaciones/.test(t) ? '⭐' : /^Consentimiento/.test(t) ? '✍️' : /^Orden/.test(t) ? '📋' : '📌');
+
+/** Hoja A4 prolija con lo que va a recibir el paciente (sirve para imprimir o guardar en PDF). */
+function hojaEnvio(envio, { t, config }) {
+  const cfg = D.configCompleta(config);
+  return h('div.doc-envio',
+    h('header.doc-cab',
+      h('div.doc-marca', h('img', { src: 'icons/logo-256.png', alt: '' }), h('div', h('strong', CONFIG.app.toUpperCase()), h('small', 'Endoscopia digestiva'))),
+      h('div.doc-tit', h('h1', TIT_ENVIO[envio.tipo] || 'Documento para el paciente'), h('p', `${envio.paciente || 'Paciente'}${envio.codigo ? ` · Turno ${envio.codigo}` : ''}`)),
+      h('div.doc-fecha', new Date(B().ahora()).toLocaleDateString('es-AR'))),
+    envio.estado === 'pendiente' ? h('p.doc-borrador', 'BORRADOR PARA REVISIÓN DEL MÉDICO — todavía no se envió al paciente') : null,
+    t ? ticket(t, { config, paciente: envio.paciente }) : null,
+    ...(envio.secciones || []).map(([tit, lineas], i) => h(`section.doc-sec.doc-sec--${i % 5}`,
+      h('h2', h('span.doc-ico', ICONO_SEC(tit)), tit),
+      h('ul', ...(lineas || []).map((x) => h('li', x))))),
+    h('footer.doc-pie', h('span', `${cfg.medico.nombre || 'Médico/a actuante'}${cfg.medico.matricula ? ' · ' + cfg.medico.matricula : ''}`), h('span', `${cfg.lugar.nombre}${cfg.lugar.direccion ? ' · ' + cfg.lugar.direccion : ''}`), h('span', 'Emergencias: 107')));
+}
+
+const escH = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+/** El mismo documento en Word (.doc): se abre y se edita en Microsoft Word, Pages o Google Docs. */
+function wordEnvio(envio, { config }) {
+  const cfg = D.configCompleta(config);
+  const colores = ['#0891b2', '#ea580c', '#7c3aed', '#be185d', '#475569'];
+  const tk = envio.ticket;
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${escH(TIT_ENVIO[envio.tipo])}</title>
+<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#1f2937} h1{color:#be185d;font-size:18pt;margin:0} h2{font-size:13pt;margin:16pt 0 4pt;padding:4pt 8pt;color:#fff} li{margin:2pt 0} .cab{border-bottom:3pt solid #be185d;padding-bottom:6pt;margin-bottom:10pt} .tk{border:2pt dashed #be185d;padding:8pt;margin:8pt 0;background:#fdf2f8} .pie{margin-top:18pt;border-top:1pt solid #cbd5e1;padding-top:6pt;color:#64748b;font-size:9pt}</style></head><body>
+<div class="cab"><b style="color:#4283aa;letter-spacing:2pt">${escH(CONFIG.app.toUpperCase())} · ENDOSCOPIA DIGESTIVA</b><h1>${escH(TIT_ENVIO[envio.tipo] || 'Documento para el paciente')}</h1><p>${escH(envio.paciente || 'Paciente')}${envio.codigo ? ' · Turno <b>' + escH(envio.codigo) + '</b>' : ''} · ${new Date(B().ahora()).toLocaleDateString('es-AR')}</p></div>
+${tk ? `<div class="tk"><b>${escH(tk.estudio)}</b><br>Fecha: <b>${escH(tk.fecha)}</b> · Hora: <b>${escH(tk.hora)} h</b> · Presentarse: <b>${escH(tk.presentarse)} h</b><br>Lugar: ${escH(tk.lugar)}<br>Código del turno: <b>${escH(envio.codigo)}</b></div>` : ''}
+${(envio.secciones || []).map(([tit, l], i) => `<h2 style="background:${colores[i % 5]}">${escH(tit)}</h2><ul>${(l || []).map((x) => `<li>${escH(x)}</li>`).join('')}</ul>`).join('\n')}
+<p class="pie">${escH(cfg.medico.nombre || '')} ${escH(cfg.medico.matricula || '')} · ${escH(cfg.lugar.nombre)} ${escH(cfg.lugar.direccion || '')} · Emergencias: 107</p></body></html>`;
+  descargar(`${(envio.paciente || 'paciente').replace(/[^\wáéíóúñ ,.-]/gi, '')} - ${TIT_ENVIO[envio.tipo] || 'documento'}.doc`, '\ufeff' + html, 'application/msword');
 }
 
 function buzonDemo({ tipo, t, secciones, paciente, config, email }) {
@@ -216,7 +267,8 @@ export function vistaEndoPaciente(ctx) {
   const activos = Object.entries(ctx.turnos || {}).filter(([, t]) => E.turnoActivo(t)).sort((a, b) => a[1].fecha.localeCompare(b[1].fecha));
   const conInforme = Object.values(ctx.turnos || {}).some((t) => t.informe?.resultado);
   if (!W.paso) W.paso = activos.length || conInforme ? 'mis' : 'inicio';
-  const ir = (p) => { W.paso = p; ctx.render(); window.scrollTo(0, 0); };
+  // Se suelta el foco del campo de texto: si no, la pantalla espera a que el usuario salga del campo (Safari / iPhone)
+  const ir = (p) => { document.activeElement?.blur?.(); W.paso = p; ctx.render(); window.scrollTo(0, 0); };
 
   const cab0 = heroe('endoscopia', 'Turnos de endoscopia', 'Pedí tu turno de endoscopia alta, baja o ambas en 4 pasos, desde el teléfono, la tablet o la computadora.');
   const cab = ['docs', 'ticket'].includes(W.paso) ? cab0 : h('div.endo-cab', cab0, bloqueEspera(ctx, ir, cfg));
@@ -255,13 +307,26 @@ function bloqueEspera(ctx, ir, cfg) {
         } }, icono('ok', { tam: 18 }), 'Tomar este lugar'),
         h('button.btn-link.oferta-no', { type: 'button', onclick: async () => { await D.rechazarOferta(ctx.uid, e); toast('Listo: seguís en la lista para el próximo lugar', 'ok'); } }, 'No me sirve')));
   }
-  return h('div.espera-estado', icono('reloj', { tam: 18 }),
+  return h('div.espera-bloque', h('div.espera-estado', icono('reloj', { tam: 18 }),
     h('span', h('strong', 'Estás en la lista de espera '), `para ${E.ESTUDIOS[e.tipo]?.corto || 'tu estudio'}${e.antesDe ? `, para adelantar tu turno del ${E.fechaCorta(e.antesDe)}` : ''}. Si se libera un lugar te avisamos por correo y lo ves acá.`),
-    h('button.btn-link', { type: 'button', onclick: async () => { await D.salirEspera(ctx.uid); toast('Saliste de la lista de espera', 'ok'); } }, 'Salir de la lista'));
+    h('button.btn-link', { type: 'button', onclick: async () => { await D.salirEspera(ctx.uid, e); toast('Saliste de la lista de espera', 'ok'); } }, 'Salir de la lista')),
+    listaAnonima(ctx));
+}
+
+/** Lista de espera tal como la ve el paciente: sin nombres, solo el puesto y desde cuándo espera cada uno. */
+function listaAnonima(ctx) {
+  const e = ctx.espera;
+  const lista = Object.entries(ctx.esperaAnon || {}).filter(([, x]) => x.tipo === e.tipo).sort((a, b) => (a[1].creado || 0) - (b[1].creado || 0));
+  if (!lista.length) return null;
+  const pos = lista.findIndex(([id]) => id === e.anon) + 1;
+  return h('div.espera-anon',
+    h('strong', pos ? `Estás en el puesto ${pos} de ${lista.length} para ${E.ESTUDIOS[e.tipo].corto}` : `Lista de espera de ${E.ESTUDIOS[e.tipo].corto}`),
+    h('ol', ...lista.map(([id, x], i) => h(`li${id === e.anon ? '.yo' : ''}`, h('span.num', `${i + 1}`), h('span', id === e.anon ? 'Vos' : 'Paciente en espera'), h('small', `desde ${fecha(x.creado)}`)))),
+    h('small.ayuda', 'Por privacidad no se muestran nombres. Cuando se libera un lugar, se le ofrece primero al puesto 1.'));
 }
 
 async function anotarme(ctx, datos) {
-  try { await D.anotarEspera(ctx.uid, datos); toast('Te anotamos en la lista de espera: si se libera un lugar, te avisamos por correo', 'ok', 6000); }
+  try { await D.anotarEspera(ctx.uid, datos, ctx.espera); toast('Te anotamos en la lista de espera: si se libera un lugar, te avisamos por correo', 'ok', 6000); }
   catch (e) { console.error(e); toast('No se pudo anotar en la lista de espera', 'error'); }
 }
 
@@ -353,6 +418,8 @@ function pasoPre(ctx, ir, cfg) {
       : h('div.pre-falta',
         h('strong', ev.faltan.some((i) => i.estado === 'sin-responder') ? 'Respondé los tres puntos para seguir' : `Te falta: ${ev.faltan.map((i) => i.nombre.toLowerCase()).join(', ')}`),
         h('ul', ...ev.faltan.filter((i) => i.estado !== 'sin-responder').map((i) => h('li', h('strong', i.nombre), ` — ${i.texto}`))),
+        !cfg.rscSedacion ? h('p.ayuda', '¿Solo te indicaron una rectoscopia (rectosigmoidoscopia)? Se hace sin sedación y no necesita prequirúrgico: ',
+          h('button.btn-link', { type: 'button', onclick: async () => { W.soloRsc = true; W.tipo = 'rsc'; W.libre = null; try { await D.guardarEndoPaciente(ctx.uid, { pre }); } catch { /* */ } ir('turno'); } }, 'elegir turno de rectoscopia')) : null,
         ev.pedir.length ? h('div.botones',
           h('button.btn.btn--primario', { type: 'button', onclick: guardarY('ordenes') }, icono('texto', { tam: 16 }), ev.pedir.length === 1 ? 'Generar mi orden' : `Generar mis ${ev.pedir.length} órdenes`),
           h('button.btn.btn--suave', { type: 'button', onclick: guardarY('inicio', 'Guardamos tus respuestas. Volvé cuando tengas todo.') }, 'Guardar y volver después')) : null));
@@ -412,7 +479,7 @@ function pasoOrdenes(ctx, ir, cfg) {
   return h('div.seccion',
     h('section.orden-listo', { style: estiloSeccion('endoscopia') },
       h('span.orden-listo-ico', icono('texto', { tam: 28 })),
-      h('div', h('h2', ords.length === 1 ? 'Tu orden está lista' : `Tus ${ords.length} órdenes están listas`), h('p', `Firmadas por ${cfg.medico.nombre}${cfg.medico.matricula ? ' (' + cfg.medico.matricula + ')' : ''}. Imprimilas o guardalas en PDF y también te las mandamos por correo.`)),
+      h('div', h('h2', ords.length === 1 ? 'Tu orden está lista' : `Tus ${ords.length} órdenes están listas`), h('p', `Firmadas por ${cfg.medico.nombre}${cfg.medico.matricula ? ' (' + cfg.medico.matricula + ')' : ''}. Imprimilas o guardalas en PDF${cfg.revisarEnvios !== false ? '; tu médico las revisa y te las manda por correo.' : ' y también te las mandamos por correo.'}`)),
       h('div.botones',
         h('button.btn.btn--vidrio', { type: 'button', onclick: () => imprimir(hojaOrdenes(ords, { perfil: ctx.perfil, datos, config: ctx.config }), `ordenes-prequirurgico-${ctx.perfil.apellido}`) }, icono('imprimir', { tam: 16 }), 'Imprimir o PDF'),
         h('button.btn.btn--vidrio', { type: 'button', onclick: () => mandarCorreo({ tipo: 'ordenes', uid: ctx.uid, ordenes: ords, config: ctx.config, email: ctx.perfil.email }) }, icono('campana', { tam: 16 }), 'Mandar a mi correo'))),
@@ -425,10 +492,12 @@ function pasoOrdenes(ctx, ir, cfg) {
 /* ---------- Paso 3: elegir turno ---------- */
 function pasoTurno(ctx, ir, cfg) {
   const ev = E.evaluarPrequirurgico(ctx.pac.endo?.pre, B().ahora(), cfg.validez);
-  if (!ev.completo) { W.paso = 'pre'; return pasoPre(ctx, ir, cfg); }
+  const soloRsc = !ev.completo && W.soloRsc && !cfg.rscSedacion;
+  if (!ev.completo && !soloRsc) { W.paso = 'pre'; return pasoPre(ctx, ir, cfg); }
+  if (soloRsc) W.tipo = 'rsc';
   const ahora = B().ahora();
   const fechas = E.fechasAbiertas(ctx.agenda, { ahora });
-  const tipos = h('div.tipos', ...Object.values(E.ESTUDIOS).map((e) => h('button.tipo', {
+  const tipos = h('div.tipos', ...Object.values(E.ESTUDIOS).filter((e) => !soloRsc || e.id === 'rsc').map((e) => h('button.tipo', {
     type: 'button', 'aria-pressed': W.tipo === e.id, style: { '--c1': e.c1, '--c2': e.c2 },
     onclick: () => { W.tipo = e.id; W.libre = null; ctx.render(); },
   }, h('span.tipo-badge', e.simple ? 'Turno simple' : 'Turno doble'), h('strong', e.corto), h('span', e.nombre), h('small', `Dura ${e.dura}`))));
@@ -448,8 +517,9 @@ function pasoTurno(ctx, ir, cfg) {
     cuerpo = h('div',
       h('h3.endo-sub', 'Fechas abiertas'), dias,
       sel ? h('div', h('h3.endo-sub', `Horarios del ${E.fechaLarga(sel.f)}`),
-        h('div.horas', ...sel.libres.map((l) => h('button.hora', { type: 'button', 'aria-pressed': W.libre?.hora === l.hora, onclick: () => { W.libre = l; ctx.render(); } },
-          h('strong.num', E.hora(l.hora)), l.cupos.length > 1 ? h('small', `hasta ${E.hora(E.deMin(E.aMin(l.cupos.at(-1)) + (+ctx.agenda[sel.f].minutos || 30)))}`) : null)))) : vacio('calendario', 'Sin lugar', 'Todas las fechas abiertas están completas para este estudio.', ctx.espera ? null : h('button.btn.btn--primario', { type: 'button', onclick: () => anotarme(ctx, { tipo: W.tipo }) }, icono('reloj', { tam: 16 }), 'Anotarme en la lista de espera')),
+        h('div.leyenda-horas', h('span.ley-libre', 'Libre'), h('span.ley-ocupado', 'Ocupado')),
+        h('div.horas', ...E.horariosTodos(ctx.agenda[sel.f], ctx.ocupacion?.[sel.f], W.tipo, { ahora, fecha: sel.f }).map((l) => h(`button.hora${l.libre ? '' : '.hora--ocupada'}`, { type: 'button', disabled: !l.libre, 'aria-pressed': W.libre?.hora === l.hora, 'aria-label': `${E.hora(l.hora)} ${l.libre ? 'libre' : 'ocupado'}`, onclick: () => { W.libre = { hora: l.hora, cupos: l.cupos }; ctx.render(); } },
+          h('strong.num', E.hora(l.hora)), h('small', l.libre ? (l.cupos.length > 1 ? `libre hasta ${E.hora(E.deMin(E.aMin(l.cupos.at(-1)) + (+ctx.agenda[sel.f].minutos || 30)))}` : 'Libre') : 'Ocupado'))))) : vacio('calendario', 'Sin lugar', 'Todas las fechas abiertas están completas para este estudio.', ctx.espera ? null : h('button.btn.btn--primario', { type: 'button', onclick: () => anotarme(ctx, { tipo: W.tipo }) }, icono('reloj', { tam: 16 }), 'Anotarme en la lista de espera')),
       sel && !ctx.espera ? h('p.ayuda.espera-link', '¿Ninguna fecha te sirve? ', h('button.btn-link', { type: 'button', onclick: () => anotarme(ctx, { tipo: W.tipo }) }, 'Anotate en la lista de espera'), ' y te avisamos si se libera un lugar.') : null);
   }
   return h('div.endo-turno',
@@ -462,6 +532,7 @@ function pasoTurno(ctx, ir, cfg) {
 /* ---------- Paso 4: consentimiento, preparación y firma ---------- */
 function pasoDocs(ctx, ir, cfg) {
   if (!W.tipo || !W.fecha || !W.libre) { W.paso = 'turno'; return pasoTurno(ctx, ir, cfg); }
+  if (W.tipo !== 'rsc') W.soloRsc = false;
   const perfil = ctx.perfil;
   const turno = { tipo: W.tipo, fecha: W.fecha, hora: W.libre.hora };
   const datos = ctx.pac.endo?.datos || W.d;
@@ -475,7 +546,7 @@ function pasoDocs(ctx, ir, cfg) {
       preparacion: docs.pasos.map((p) => `${p.cuando}: ${p.que.join(' ')}`),
     }).then((r) => { if (r) { W.ia = r; ctx.render(); } });
   }
-  const firma = panelFirma({ onCambio: () => {} });
+  const firma = panelFirma({ onCambio: () => {}, nombre: `${perfil.nombre} ${perfil.apellido}`, teclado: true });
   const leido = h('input', { type: 'checkbox' });
   const acl = h('input', { type: 'text', value: `${perfil.nombre} ${perfil.apellido}`, maxlength: 80, id: 'endo-acl' });
   const err = h('div.form-error', { role: 'alert' });
@@ -483,15 +554,16 @@ function pasoDocs(ctx, ir, cfg) {
   btn.onclick = async () => {
     err.textContent = '';
     if (!leido.checked) { err.textContent = 'Marcá que leíste y entendiste el consentimiento.'; return; }
-    if (firma.vacia()) { err.textContent = 'Firmá con el dedo o el mouse en el recuadro.'; return; }
+    if (firma.vacia()) { err.textContent = 'Firmá en el recuadro con el dedo, el lápiz o el mouse, o tocá «Escribir con el teclado».'; return; }
     if (!acl.value.trim()) { err.textContent = 'Escribí tu nombre y apellido como aclaración.'; return; }
     btn.disabled = true; btn.textContent = 'Reservando…';
     try {
-      const r = await D.reservar(ctx.uid, perfil, { tipo: W.tipo, fecha: W.fecha, libre: W.libre, datos, pre: ctx.pac.endo?.pre || W.pre, firma: firma.png(), aclaracion: acl.value, config: cfg, textoConsentimiento: docs.consentimiento, reemplaza: W.reemplaza, enEspera: W.enEspera || !!ctx.espera });
+      const r = await D.reservar(ctx.uid, perfil, { tipo: W.tipo, fecha: W.fecha, libre: W.libre, datos, pre: ctx.pac.endo?.pre || W.pre, firma: firma.png(), metodoFirma: firma.metodo(), aclaracion: acl.value, config: cfg, textoConsentimiento: docs.consentimiento, reemplaza: W.reemplaza, enEspera: ctx.espera || null });
       W.ultimo = r.id; W.paso = 'ticket'; W.recienCreado = true;
       const t = { ...turno, codigo: r.codigo, cupos: W.libre.cupos, estado: 'confirmado', reprogramaciones: 0, consentimiento: { huella: r.huella } };
       mandarCorreo({ tipo: 'turno', uid: ctx.uid, t, id: r.id, docs, paciente: `${perfil.nombre} ${perfil.apellido}`, config: ctx.config, email: perfil.email });
       W.tipo = W.fecha = W.libre = W.reemplaza = null; W.enEspera = false;
+      document.activeElement?.blur?.();
       ctx.render(); window.scrollTo(0, 0);
     } catch (er) {
       console.error(er);
@@ -522,7 +594,7 @@ function pasoTicket(ctx, ir, cfg) {
   W.recienCreado = false;
   return h('div.ticket-final',
     festejo ? h('div.confeti', { 'aria-hidden': 'true' }, ...Array.from({ length: 28 }, (_, i) => h('i', { style: { '--i': i } }))) : null,
-    h('header.ticket-final-cab', h('span.pre-ok-ico.latido', icono('okCirculo', { tam: 30 })), h('div', h('h1', '¡Turno confirmado!'), h('p', `Te mandamos el ticket, la preparación y el consentimiento a ${ctx.perfil.email}.`))),
+    h('header.ticket-final-cab', h('span.pre-ok-ico.latido', icono('okCirculo', { tam: 30 })), h('div', h('h1', '¡Turno confirmado!'), h('p', cfg.revisarEnvios !== false ? `Tu ticket ya está acá. Tu médico revisa la preparación y el consentimiento y te los manda a ${ctx.perfil.email}.` : `Te mandamos el ticket, la preparación y el consentimiento a ${ctx.perfil.email}.`))),
     ticket(t, { config: ctx.config, paciente: nombre }),
     accionesTurno(ctx, W.ultimo, t, docs, nombre),
     selloConsentimiento(t),
@@ -553,7 +625,7 @@ function misTurnos(ctx, ir, cfg, activos) {
         ticket(t, { config: ctx.config, paciente: nombre }),
         lineaEstado(t),
         accionesTurno(ctx, id, t, docs, nombre),
-        h('details.plegable', h('summary', h('span', 'Preparación, recomendaciones y consentimiento'), icono('chevronAbajo', { tam: 18 })), h('div.plegable-cuerpo', bloqueDocs(docs, null), tarjeta('Consentimiento firmado', { icono: 'editar' }, t.consentimiento?.texto ? h('div.consentimiento-texto', ...t.consentimiento.texto.split('\n').map((l) => h('p', l))) : textoConsentimiento(docs), t.consentimiento?.firma ? h('img.firma-img', { src: t.consentimiento.firma, alt: 'Tu firma' }) : null, selloConsentimiento(t)))),
+        h('details.plegable', h('summary', h('span', 'Preparación, recomendaciones y consentimiento'), icono('chevronAbajo', { tam: 18 })), h('div.plegable-cuerpo', t.docsAprobados ? docsAprobados(t) : bloqueDocs(docs, null), tarjeta('Consentimiento firmado', { icono: 'editar' }, t.consentimiento?.texto ? h('div.consentimiento-texto', ...t.consentimiento.texto.split('\n').map((l) => h('p', l))) : textoConsentimiento(docs), t.consentimiento?.firma ? h('img.firma-img', { src: t.consentimiento.firma, alt: 'Tu firma' }) : null, selloConsentimiento(t)))),
         t.estado === 'confirmado' && !ctx.espera ? h('button.btn.btn--suave', { type: 'button', onclick: () => anotarme(ctx, { tipo: t.tipo, antesDe: t.fecha, turno: id }) }, icono('reloj', { tam: 16 }), 'Avisame si se libera un lugar antes') : null,
         t.estado === 'confirmado' ? h('button.btn-link.btn-peligro', { type: 'button', onclick: async () => {
           if (await confirmar({ titulo: 'Cancelar turno', texto: `¿Cancelás tu turno del ${E.fechaLarga(t.fecha)}? El horario queda libre para otra persona.`, si: 'Cancelar turno', no: 'Volver', peligro: true })) {
@@ -564,6 +636,11 @@ function misTurnos(ctx, ir, cfg, activos) {
     h('div.botones', h('button.btn.btn--primario', { type: 'button', onclick: () => ir('datos') }, icono('mas', { tam: 16 }), 'Solicitar otro turno')),
     ...pasados.filter(([, t]) => t.informe?.resultado).map(([, t]) => tarjeta(`Tu ${E.ESTUDIOS[t.tipo].corto} del ${E.fechaCorta(t.fecha)}: próximo control`, { icono: 'calendario', seccion: 'endoscopia' }, resumenVigilancia(t))),
     pasados.length ? tarjeta('Turnos anteriores', { icono: 'reloj' }, h('ul.turnos-pasados', ...pasados.map(([, t]) => h('li', h('strong', `${E.ESTUDIOS[t.tipo].corto} · ${E.fechaCorta(t.fecha)}`), chip(E.ESTADOS[t.estado]?.nombre || t.estado, E.ESTADOS[t.estado]?.tono || 'neutro'), h('small.num', t.codigo))))) : null);
+}
+
+function docsAprobados(t) {
+  return tarjeta('Documentación revisada por tu médico', { icono: 'okCirculo', seccion: 'endoscopia', extra: chip(`Enviada ${fecha(t.docsAprobados.fecha)}`, 'ok') },
+    h('div.doc-app', ...(t.docsAprobados.secciones || []).filter(([tit]) => !/^Consentimiento/.test(tit)).map(([tit, l]) => h('section', h('h4', ICONO_SEC(tit), ' ', tit), h('ul', ...(l || []).map((x) => h('li', x)))))));
 }
 
 function lineaEstado(t) {
@@ -604,7 +681,7 @@ function abrirInforme(x, ctx) {
   const set = (obj, k) => (v) => { obj[k] = v; recalcular(); };
   const a = inf.alta, b = inf.baja;
   let barrett;
-  const alta = t.tipo === 'vcc' ? null : tarjeta('Endoscopia alta', { icono: 'endoscopio', seccion: 'endoscopia' },
+  const alta = !['veda', 'doble'].includes(t.tipo) ? null : tarjeta('Endoscopia alta', { icono: 'endoscopio', seccion: 'endoscopia' },
     h('div.inf-grid',
       h('div.campo', h('label', 'Esofagitis (Los Ángeles)'), segm([['no', 'No'], ['A', 'A'], ['B', 'B'], ['C', 'C'], ['D', 'D']], a.esofagitis || 'no', set(a, 'esofagitis'))),
       casilla('Esófago de Barrett', a.barrett, (v) => { a.barrett = v; barrett.hidden = !v; recalcular(); }),
@@ -621,7 +698,7 @@ function abrirInforme(x, ctx) {
         casilla('Úlcera gástrica', a.ulceraGastrica, set(a, 'ulceraGastrica')),
         casilla('Lesión sospechosa de neoplasia', a.neoplasia, set(a, 'neoplasia'))),
       h('div.campo', h('label', 'Pólipos gástricos'), segm([['no', 'No'], ['glandulas', 'Glándulas fúndicas'], ['hiperplasicos', 'Hiperplásicos'], ['adenoma', 'Adenoma']], a.poliposGastricos || 'no', set(a, 'poliposGastricos')))));
-  const baja = t.tipo === 'veda' ? null : tarjeta('Colonoscopia', { icono: 'endoscopio', seccion: 'endoscopia' },
+  const baja = t.tipo === 'veda' ? null : tarjeta(t.tipo === 'rsc' ? 'Rectosigmoidoscopia' : 'Colonoscopia', { icono: 'endoscopio', seccion: 'endoscopia' },
     h('div.inf-grid',
       h('div.campo', h('label', 'Preparación (Boston)'), segm([['adecuada', 'Adecuada (≥ 6 y cada segmento ≥ 2)'], ['inadecuada', 'Inadecuada']], b.preparacion || 'adecuada', set(b, 'preparacion'))),
       casilla('Incompleta: no se llegó al ciego', b.incompleta, set(b, 'incompleta')),
@@ -691,9 +768,10 @@ const M = { tab: 'turnos', dia: null, buscar: '' };
  * ctx: { perfil, indice, config, agenda, ocupacion, turnos, abrirFicha, render }
  */
 export function vistaEndoMedico(ctx) {
-  const tabs = [['turnos', 'Turnos', 'ticket'], ['agenda', 'Agenda', 'calendario'], ['admision', 'Admisión', 'qr'], ['config', 'Configuración', 'editar']];
+  const pendEnv = Object.values(ctx.envios || {}).filter((e) => e.estado === 'pendiente').length;
+  const tabs = [['turnos', 'Turnos', 'ticket'], ['envios', pendEnv ? `Envíos (${pendEnv})` : 'Envíos', 'campana'], ['agenda', 'Agenda', 'calendario'], ['admision', 'Admisión', 'qr'], ['config', 'Configuración', 'editar']];
   const pend = !ctx.config?.medico?.nombre;
-  const cuerpo = { turnos: tabTurnos, agenda: tabAgenda, admision: tabAdmision, config: tabConfig }[M.tab](ctx);
+  const cuerpo = { turnos: tabTurnos, envios: tabEnvios, agenda: tabAgenda, admision: tabAdmision, config: tabConfig }[M.tab](ctx);
   return h('div.seccion',
     heroe('endoscopia', 'Endoscopia digestiva', 'Agenda, turnos de los pacientes, admisión con QR y órdenes firmadas'),
     pend && M.tab !== 'config' ? aviso('aviso', h('span', 'Antes de abrir la agenda, completá el médico actuante, su firma y el lugar. ', h('button.btn-link', { type: 'button', onclick: () => { M.tab = 'config'; ctx.render(); } }, 'Ir a Configuración'))) : null,
@@ -729,8 +807,28 @@ function tabTurnos(ctx) {
       return h('button.dia', { type: 'button', 'aria-selected': f === M.dia, onclick: () => { M.dia = f; ctx.render(); } },
         h('small', d.toLocaleDateString('es-AR', { weekday: 'short' })), h('strong.num', String(d.getDate())), h('span', d.toLocaleDateString('es-AR', { month: 'short' })), h('em', `${n} turno${n === 1 ? '' : 's'}`));
     })) : vacio('calendario', 'Sin turnos ni fechas', 'Abrí fechas en la pestaña Agenda para que los pacientes puedan elegir.'),
+    M.dia ? grillaDia(ctx, M.dia, todos) : null,
     M.dia ? tarjeta(`Turnos del ${E.fechaLarga(M.dia)}`, { icono: 'ticket', seccion: 'endoscopia' },
       delDia.length ? h('div.turnos-med', ...delDia.map((x) => filaTurno(x, ctx))) : h('p.ayuda', 'Sin turnos ese día.')) : null);
+}
+
+/** Grilla del día para el médico: cada horario libre u ocupado, con el paciente y el estudio. */
+function grillaDia(ctx, dia, todos) {
+  const ag = ctx.agenda?.[dia];
+  const cupos = E.cuposDe(ag);
+  if (!cupos.length) return null;
+  const ocup = ctx.ocupacion?.[dia] || {};
+  const porId = Object.fromEntries(todos.map((x) => [x.id, x]));
+  const ocupados = cupos.filter((c) => ocup[c]).length;
+  return tarjeta(`Agenda del ${E.fechaLarga(dia)} · ${ocupados} de ${cupos.length} ocupados`, { icono: 'calendario', seccion: 'endoscopia' },
+    h('div.grilla-dia', ...cupos.map((c) => {
+      const x = porId[ocup[c]];
+      if (!ocup[c]) return h('div.celda.celda--libre', h('strong.num', E.hora(c)), h('span', 'Libre'));
+      const e = x ? E.ESTUDIOS[x.t.tipo] : null;
+      return h('button.celda.celda--ocupada', { type: 'button', style: e ? { '--c1': e.c1, '--c2': e.c2 } : null, title: x ? `${x.t.paciente?.n} · ${e.nombre}` : 'Ocupado',
+        onclick: () => { if (x) { M.tab = 'admision'; M.buscar = x.t.codigo; ctx.render(); } } },
+        h('strong.num', E.hora(c)), h('span', x?.t.paciente?.n || 'Ocupado'), x ? h('small', `${e.corto} · ${E.ESTADOS[E.estadoVisible(x.t)].nombre}`) : null);
+    })));
 }
 
 function filaTurno(x, ctx) {
@@ -749,7 +847,7 @@ function filaTurno(x, ctx) {
     h('div.turno-med-hora', h('strong.num', E.hora(t.hora)), h('small', e.corto)),
     h('div.turno-med-info',
       h('strong', t.paciente?.n || 'Paciente'), h('small', `DNI •••${t.paciente?.d3 || ''} · ${t.datos?.cobertura || 'Sin cobertura'}${t.datos?.afiliado ? ' ' + t.datos.afiliado : ''} · Acomp.: ${t.datos?.acompNombre || '—'} ${t.datos?.acompTel || ''}`),
-      h('div.chips', chip(E.ESTADOS[est].nombre, E.ESTADOS[est].tono), chip(pre.completo ? 'Prequirúrgico OK' : 'Prequirúrgico incompleto', pre.completo ? 'ok' : 'peligro', 'matraz'), h('span.chip.chip--neutro.num', t.codigo),
+      h('div.chips', chip(E.ESTADOS[est].nombre, E.ESTADOS[est].tono), t.tipo === 'rsc' && !D.configCompleta(ctx.config).rscSedacion ? chip('Sin sedación', 'info', 'matraz') : chip(pre.completo ? 'Prequirúrgico OK' : 'Prequirúrgico incompleto', pre.completo ? 'ok' : 'peligro', 'matraz'), h('span.chip.chip--neutro.num', t.codigo),
         t.consentimiento?.huella ? chip('Consentimiento con huella', 'info', 'huella') : null,
         t.recordatorio ? chip(`Recordatorio enviado ${fechaHora(t.recordatorio)}`, 'info', 'campana') : t.estado === 'confirmado' ? chip('Recordatorio: 48 h antes', 'neutro', 'campana') : null,
         ...(t.alertas || []).map((a) => chip(a, 'aviso', 'alerta'))),
@@ -808,6 +906,79 @@ async function suspender(x, ctx) {
         } catch (er) { console.error(er); toast('No se pudo suspender', 'error'); e.target.disabled = false; }
       } }, 'Suspender y reprogramar')],
   });
+}
+
+/* ---------- Envíos: revisar, editar y aprobar lo que recibe el paciente ---------- */
+const turnoDe = (ctx, e) => (e.pac && e.turno ? ctx.turnos?.[e.pac]?.[e.turno] || null : null);
+function imprimirEnvio(e, ctx) { imprimir(hojaEnvio(e, { t: turnoDe(ctx, e), config: ctx.config }), `${e.paciente || 'paciente'} - ${TIT_ENVIO[e.tipo] || 'documento'}`); }
+
+function tabEnvios(ctx) {
+  const lista = Object.entries(ctx.envios || {}).sort((a, b) => (a[1].estado === 'pendiente' ? 0 : 1) - (b[1].estado === 'pendiente' ? 0 : 1) || (b[1].creado || 0) - (a[1].creado || 0));
+  const pend = lista.filter(([, e]) => e.estado === 'pendiente');
+  const hechos = lista.filter(([, e]) => e.estado !== 'pendiente').slice(0, 15);
+  const cfg = D.configCompleta(ctx.config);
+  const item = ([id, e]) => h(`article.envio.envio--${e.estado}`,
+    h('div.envio-ico', icono(e.tipo === 'ordenes' ? 'texto' : 'ticket', { tam: 20 })),
+    h('div.envio-info',
+      h('strong', e.paciente || 'Paciente'),
+      h('span', TIT_ENVIO[e.tipo] || e.tipo),
+      h('small', `${e.codigo ? e.codigo + ' · ' : ''}${e.ticket ? e.ticket.fecha + ' ' + e.ticket.hora + ' h · ' : ''}preparado ${fechaHora(e.creado)}${e.editado ? ' · editado' : ''}`)),
+    h('div.envio-estado', chip({ pendiente: 'Para revisar', enviado: 'Enviado', descartado: 'Descartado' }[e.estado] || e.estado, { pendiente: 'aviso', enviado: 'ok', descartado: 'neutro' }[e.estado] || 'neutro')),
+    h('div.botones.envio-acc',
+      h('button.btn.btn--suave', { type: 'button', onclick: () => imprimirEnvio(e, ctx) }, icono('pdf', { tam: 15 }), 'Ver PDF'),
+      h('button.btn.btn--suave', { type: 'button', onclick: () => wordEnvio(e, { config: ctx.config }) }, icono('texto', { tam: 15 }), 'Word'),
+      e.estado === 'pendiente' ? [
+        h('button.btn.btn--suave', { type: 'button', onclick: () => editarEnvio(id, e, ctx) }, icono('editar', { tam: 15 }), 'Editar'),
+        h('button.btn.btn--primario', { type: 'button', onclick: (ev) => aprobarEnvio(id, e, ctx, ev.currentTarget) }, icono('ok', { tam: 15 }), 'Aprobar y enviar'),
+        h('button.btn-link', { type: 'button', onclick: async () => { if (await confirmar({ titulo: 'Descartar envío', texto: 'No se le manda nada al paciente. El turno sigue igual.', si: 'Descartar', peligro: true })) { await D.descartarEnvio(id); toast('Envío descartado', 'ok'); } } }, 'Descartar'),
+      ] : null));
+  return h('div.endo-med',
+    aviso('info', h('span', cfg.revisarEnvios !== false
+      ? 'Todo lo que la app le manda al paciente (confirmación con preparación y consentimiento, órdenes y reprogramaciones) espera acá tu revisión. Miralo en PDF o Word, editalo si hace falta y aprobalo para que salga por correo. El paciente ya ve su ticket en la app. Los recordatorios de 48 h y los avisos de la lista de espera salen solos con el texto de tus plantillas (Configuración).'
+      : 'La revisión previa está desactivada: los correos salen directo. Activala en Configuración.')),
+    tarjeta(`Para revisar (${pend.length})`, { icono: 'campana', seccion: 'endoscopia' }, pend.length ? h('div.envios', ...pend.map(item)) : vacio('okCirculo', 'Nada pendiente', 'Cuando un paciente saque turno o pida órdenes, lo vas a ver acá.')),
+    hechos.length ? tarjeta('Últimos envíos', { icono: 'reloj', seccion: 'endoscopia' }, h('div.envios', ...hechos.map(item))) : null);
+}
+
+function editarEnvio(id, e, ctx) {
+  const secs = JSON.parse(JSON.stringify(e.secciones || []));
+  const caja = h('div.editor-envio');
+  const pintar = () => caja.replaceChildren(...secs.map((s, i) => h('fieldset.ed-sec',
+    h('div.ed-cab', h('input', { type: 'text', value: s[0], maxlength: 120, 'aria-label': 'Título de la sección', oninput: (ev) => { s[0] = ev.target.value; } }),
+      h('button.btn-icono', { type: 'button', 'aria-label': 'Quitar sección', title: 'Quitar sección', onclick: () => { secs.splice(i, 1); pintar(); } }, icono('basura', { tam: 16 }))),
+    h('textarea', { rows: Math.min(12, Math.max(3, s[1].length + 1)), 'aria-label': 'Texto (un renglón por punto)', value: s[1].join('\n'), oninput: (ev) => { s[1] = ev.target.value.split('\n').map((x) => x.trim()).filter(Boolean); } }))),
+    h('button.btn.btn--suave', { type: 'button', onclick: () => { secs.push(['Nota del médico', ['']]); pintar(); } }, icono('mas', { tam: 15 }), 'Agregar una nota del médico'));
+  pintar();
+  const m = modal({
+    titulo: `Editar · ${e.paciente || 'Paciente'}`, ancho: 860, clase: 'modal--texto',
+    cuerpo: h('div', h('p.ayuda', 'Cada renglón es un punto de la lista. Los cambios valen solo para este paciente; para cambiar el texto de todos, usá las plantillas en Configuración.'), caja),
+    acciones: [h('button.btn.btn--suave', { type: 'button', onclick: () => m.cerrar() }, 'Cancelar'),
+      h('button.btn.btn--primario', { type: 'button', onclick: async () => { await D.guardarEdicionEnvio(id, secs.filter((s) => s[0].trim() && s[1].length)); m.cerrar(); toast('Cambios guardados: revisalo en PDF antes de aprobar', 'ok', 5000); } }, icono('ok', { tam: 16 }), 'Guardar cambios')],
+  });
+}
+
+async function aprobarEnvio(id, e, ctx, btn) {
+  if (!(await confirmar({ titulo: 'Aprobar y enviar', icono: 'campana', si: 'Enviar al paciente', texto: `Se le manda por correo a ${e.paciente || 'el paciente'} «${TIT_ENVIO[e.tipo] || e.tipo}» tal como lo ves en el PDF.` }))) return;
+  btn.disabled = true;
+  const { estado, creado, por, email, editado, ...datos } = e;
+  const qr = e.codigo ? await qrPNG(urlTurno(e.codigo)).catch(() => null) : null;
+  const r = await D.enviarCorreo({ ...datos, qr }).catch((er) => { console.warn(er); return { error: true }; });
+  if (r?.error) { toast('No se pudo enviar. Revisá la conexión y el Apps Script.', 'error', 6000); btn.disabled = false; return; }
+  if (r?.demo) buzonDemo({ tipo: e.tipo, t: turnoDe(ctx, e), secciones: e.secciones, paciente: e.paciente, config: ctx.config, email: e.email });
+  await D.marcarEnviado(id, e);
+  toast('Enviado al paciente', 'ok');
+}
+
+/** Ejemplo de lo que recibe un paciente, para revisar las plantillas antes de usarlas. */
+function envioDeEjemplo(tipo, ctx, cfgActual) {
+  const ahora = B().ahora();
+  const fecha = E.fechasAbiertas(ctx.agenda, { ahora })[0] || E.diaISO(ahora + 7 * 86400000);
+  const t = { tipo, fecha, hora: '0900', codigo: 'MTR-EJEM-PL42', estado: 'confirmado', reprogramaciones: 0, cupos: ['0900'] };
+  const paciente = { nombre: 'Paciente', apellido: 'De Ejemplo', dni: '30123456', fechaNac: '1970-05-10' };
+  const docs = E.documentos({ paciente, turno: t, datos: { antecedentes: {} }, config: cfgActual });
+  const cfg = D.configCompleta(cfgActual);
+  return { t, envio: { tipo: 'turno', estado: 'pendiente', paciente: 'Paciente De Ejemplo', codigo: t.codigo, secciones: seccionesDe({ docs, t }),
+    ticket: { estudio: E.ESTUDIOS[tipo].nombre, fecha: E.fechaLarga(fecha), hora: E.hora(t.hora), presentarse: docs.presentarse, lugar: `${cfg.lugar.nombre}${cfg.lugar.direccion ? ', ' + cfg.lugar.direccion : ''}` } } };
 }
 
 function tabAgenda(ctx) {
@@ -926,7 +1097,7 @@ function tabConfig(ctx) {
   };
   return h('div.endo-med',
     tarjeta('Médico actuante', { icono: 'estetoscopio', seccion: 'endoscopia' },
-      h('div.grid-form', f('Nombre y apellido (como va en el sello)', 'medico.nombre', { maxlength: 80, placeholder: 'Dr. Nombre Apellido' }), f('Matrícula', 'medico.matricula', { maxlength: 40, placeholder: 'MN 000000' }), f('Especialidad', 'medico.especialidad', { maxlength: 80 })),
+      h('div.grid-form', f('Nombre y apellido', 'medico.nombre', { maxlength: 80, placeholder: 'Dr. Nombre Apellido' }, { ayuda: 'Como va en el sello.' }), f('Matrícula', 'medico.matricula', { maxlength: 40, placeholder: 'MN 000000' }, { ayuda: 'Nacional o provincial.' }), f('Especialidad', 'medico.especialidad', { maxlength: 80 }, { ayuda: 'Figura en las órdenes.' })),
       h('div.grid-2.firma-grid',
         h('div.campo', h('label', 'Firma actual'), firmaPrev, h('label.btn.btn--suave.subir-firma', icono('subir', { tam: 15 }), 'Subir imagen de la firma', archivo)),
         h('div.campo', h('label', 'O firmá acá'), firma.el)),
@@ -934,7 +1105,20 @@ function tabConfig(ctx) {
     tarjeta('Lugar y preparación', { icono: 'inicio', seccion: 'endoscopia' },
       h('div.grid-form', f('Nombre del servicio', 'lugar.nombre', { maxlength: 80 }), f('Dirección', 'lugar.direccion', { maxlength: 120 }),
         f('Preparación para colonoscopia', 'preparacion', { type: 'select', opciones: Object.entries(E.PREPARACIONES).map(([k, p]) => [k, p.nombre]) }),
-        f('Duración de cupo por defecto (min)', 'minutos', { type: 'number', maxlength: 3 }))),
+        f('Preparación para rectoscopia', 'prepRsc', { type: 'select', opciones: Object.entries(E.PREP_RSC).map(([k, p]) => [k, p.nombre]) }),
+        f('Duración de cupo por defecto (min)', 'minutos', { type: 'number', maxlength: 3 })),
+      aviso('info', 'Fosfo-Dom (fosfato de sodio): la guía ESGE no lo recomienda de rutina por el riesgo de daño renal. Si lo elegís, la app avisa en cada turno de pacientes de 65 años o más, o con enfermedad renal o cardíaca, para cambiarlo por polietilenglicol.'),
+      h('label.check', h('input', { type: 'checkbox', checked: !!st.rscSedacion, onchange: (e) => { st.rscSedacion = e.target.checked; } }), h('span', 'La rectoscopia se hace con sedación (pide prequirúrgico y acompañante)'))),
+    tarjeta('Lo que recibe el paciente', { icono: 'campana', seccion: 'endoscopia' },
+      h('label.check.check--legal', h('input', { type: 'checkbox', checked: st.revisarEnvios !== false, onchange: (e) => { st.revisarEnvios = e.target.checked; } }),
+        h('span', h('strong', 'Revisar cada envío antes de mandarlo. '), 'La confirmación del turno, las órdenes y las reprogramaciones esperan en «Envíos» hasta que las apruebes.')),
+      h('p.ayuda', 'Plantillas: agregá tus indicaciones para cada estudio (se suman a la preparación y a las recomendaciones) y mirá el resultado en PDF o Word antes de guardar.'),
+      h('div.plantillas', ...Object.values(E.ESTUDIOS).map((e) => h('div.plantilla', { style: { '--c1': e.c1, '--c2': e.c2 } },
+        h('strong', `${e.corto} · ${e.nombre}`),
+        h('textarea', { rows: 3, maxlength: 1500, placeholder: 'Indicaciones propias del consultorio (opcional)', value: st.extra?.[e.id] || '', oninput: (ev) => { st.extra = { ...(st.extra || {}), [e.id]: ev.target.value }; } }),
+        h('div.botones',
+          h('button.btn.btn--suave', { type: 'button', onclick: () => { const x = envioDeEjemplo(e.id, ctx, st); imprimir(hojaEnvio(x.envio, { t: x.t, config: st }), `Plantilla ${e.corto}`); } }, icono('pdf', { tam: 15 }), 'Ver PDF'),
+          h('button.btn.btn--suave', { type: 'button', onclick: () => wordEnvio(envioDeEjemplo(e.id, ctx, st).envio, { config: st }) }, icono('texto', { tam: 15 }), 'Word')))))),
     tarjeta('Vigencia del prequirúrgico', { icono: 'reloj', seccion: 'endoscopia' },
       h('div.grid-form', f('Análisis de sangre', 'validez.analitica', { type: 'number', maxlength: 3 }, { sufijo: 'días' }), f('ECG con informe', 'validez.ecg', { type: 'number', maxlength: 3 }, { sufijo: 'días' }), f('Valoración anestesiológica', 'validez.anestesia', { type: 'number', maxlength: 3 }, { sufijo: 'días' }))),
     h('div.botones', btn));

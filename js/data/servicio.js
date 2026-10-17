@@ -44,6 +44,8 @@ export async function perfilDe(u) {
     const titular = (B.modo === 'demo' && !!med.demoTitular) || (await esCorreoCoordinador(u.email, CONFIG.coordinadorHash));
     // Si el profesional cambió su correo, se actualiza su ficha
     if (u.email && med.email !== u.email.toLowerCase()) B.escribir(`medicos/${u.uid}/email`, u.email.toLowerCase()).catch(() => {});
+    // El coordinador quedó guardado como «pendiente» al crear su cuenta: se corrige solo (y deja de contarse como pendiente)
+    if (titular && estado !== 'aprobado') B.escribir(`medicosEstado/${u.uid}`, 'aprobado').catch(() => {});
     return { rol: 'medico', uid: u.uid, email: u.email, verificado: u.verificado, datos: med, estado: titular ? 'aprobado' : estado || 'pendiente', titular };
   }
   const per = await B.leer(`pacientes/${u.uid}/perfil`).catch(() => null);
@@ -182,7 +184,9 @@ export async function borrarPaciente(uid) {
       if (t.codigo) { c[`estadoTurno/${t.codigo}/estado`] = 'cancelado'; c[`estadoTurno/${t.codigo}/actualizado`] = B.TS; }
     }
   }
-  for (const r of ['pacientes', 'indice', 'verificados', 'evaluaciones', 'solicitudes', 'estudios', 'estudiosVenc', 'turnosEndo']) c[`${r}/${uid}`] = null;
+  const espera = await B.leer(`esperaEndo/${uid}`).catch(() => null);
+  if (espera?.anon) c[`esperaAnon/${espera.anon}`] = null;
+  for (const r of ['pacientes', 'indice', 'verificados', 'evaluaciones', 'solicitudes', 'estudios', 'estudiosVenc', 'turnosEndo', 'esperaEndo']) c[`${r}/${uid}`] = null;
   await auditar(uid, 'baja-paciente');
   await B.borrar(`estudiosArchivos/${uid}`);
   await B.actualizar('', c);

@@ -24,6 +24,12 @@ export const ESTUDIOS = {
     dura: 'entre 20 y 45 minutos',
     c1: '#f97316', c2: '#ec4899',
   },
+  rsc: {
+    id: 'rsc', corto: 'RSC', nombre: 'Rectosigmoidoscopia (rectoscopia)', cupos: 1, simple: true,
+    queEs: 'Se observa por dentro el recto y la última parte del colon (sigmoides) con un tubo flexible con cámara que se introduce por el ano. La preparación es con enemas.',
+    dura: 'entre 10 y 20 minutos',
+    c1: '#14b8a6', c2: '#0ea5e9',
+  },
   doble: {
     id: 'doble', corto: 'VEDA + VCC', nombre: 'Endoscopia alta y baja (turno doble)', cupos: 2, simple: false,
     queEs: 'Se hacen los dos estudios en la misma sedación: primero la endoscopia alta (por la boca) y después la colonoscopia (por el ano).',
@@ -73,10 +79,28 @@ export const PREPARACIONES = {
   peg4: { nombre: 'Polietilenglicol 4 litros en dosis dividida', tarde: '2 litros entre las 19 y las 21 h (un vaso de 250 ml cada 15 minutos)', manana: '2 litros a partir de 5 horas antes del estudio, terminando como mínimo 2 horas antes' },
   peg2: { nombre: 'Polietilenglicol 2 litros con ascorbato en dosis dividida', tarde: '1 litro de la solución + 500 ml de líquidos claros entre las 19 y las 21 h', manana: '1 litro de la solución + 500 ml de líquidos claros desde 5 horas antes, terminando como mínimo 2 horas antes' },
   pico: { nombre: 'Picosulfato sódico con citrato de magnesio en dosis dividida', tarde: '1 sobre disuelto en 150 ml de agua a las 19 h y después 1,5 litros de líquidos claros', manana: '1 sobre 5 horas antes del estudio y 1 litro de líquidos claros, terminando como mínimo 2 horas antes' },
+  // Fosfo-Dom (fosfato de sodio oral, Laboratorio Domínguez): esquema del laboratorio en dos tomas de 45 ml.
+  // Turno a la mañana: 15 h y 22 h del día anterior. Turno a la tarde: 21 h del día anterior y 8 h del mismo día.
+  fosfodom: {
+    nombre: 'Fosfo-Dom (fosfato de sodio) en dos tomas de 45 ml', fosfato: true,
+    tarde: 'el día anterior a las 15 h, un frasco de 45 ml disuelto en un vaso de agua (250 ml) y después 1 litro de agua o líquidos claros; a las 22 h, el segundo frasco de la misma manera',
+    manana: 'no hace falta otra toma: ya tomaste las dos el día anterior. Seguí con líquidos claros',
+    tardeT: 'a las 21 h, un frasco de 45 ml disuelto en un vaso de agua (250 ml) y después 1 litro de agua o líquidos claros',
+    mananaT: 'a las 8 h, el segundo frasco de 45 ml disuelto en un vaso de agua y después 1 litro de agua o líquidos claros',
+    dieta: 'El día anterior no comas frutas, verduras ni lácteos.',
+  },
+};
+
+/** Preparación para rectosigmoidoscopia (enemas de fosfato de sodio, tipo Fleet o Enemol). */
+export const PREP_RSC = {
+  enema2: { nombre: 'Dos enemas de fosfato de sodio', pasos: ['Primer enema 2 horas antes del estudio: acostado/a sobre el lado izquierdo, introducí la cánula y vaciá el frasco; aguantalo 5 a 10 minutos y después andá al baño.', 'Segundo enema 1 hora antes del estudio, de la misma manera.'] },
+  enema1: { nombre: 'Un enema de fosfato de sodio', pasos: ['Un enema 2 horas antes del estudio: acostado/a sobre el lado izquierdo, introducí la cánula y vaciá el frasco; aguantalo 5 a 10 minutos y después andá al baño. Si no evacuás bien, aplicá un segundo enema 1 hora antes.'] },
 };
 
 export const FUENTES = [
-  'ESGE — Preparación intestinal para colonoscopia, actualización 2019 (Hassan y col., Endoscopy 2019).',
+  'ESGE — Preparación intestinal para colonoscopia, actualización 2019 (Hassan y col., Endoscopy 2019): no recomienda el fosfato de sodio de rutina por el riesgo renal.',
+  'Laboratorio Domínguez — esquema de preparación con Fosfo-Dom (turnos de mañana y de tarde) y prospecto.',
+  'Protocolos de preparación para rectosigmoidoscopia flexible con enemas de fosfato (centros de endoscopia de EE. UU. y España).',
   'US Multi-Society Task Force — Recomendaciones para optimizar la preparación intestinal (2025).',
   'ASGE / ACG — Manejo periendoscópico de anticoagulantes y antiagregantes (2022).',
   'BSG / ESGE — Endoscopia en pacientes con antiagregantes o anticoagulantes, actualización 2021.',
@@ -148,6 +172,14 @@ export function horariosLibres(dia, ocupados = {}, tipo, { ahora = Date.now(), f
   return out;
 }
 
+/** Todos los horarios de un día para un estudio, marcados libre u ocupado (lo que ve el paciente, sin datos de nadie). */
+export function horariosTodos(dia, ocupados = {}, tipo, opts = {}) {
+  const libres = new Set(horariosLibres(dia, ocupados, tipo, opts).map((l) => l.hora));
+  const n = ESTUDIOS[tipo]?.cupos || 1;
+  const cupos = cuposDe(dia);
+  return cupos.slice(0, Math.max(0, cupos.length - n + 1)).map((c, i) => ({ hora: c, cupos: cupos.slice(i, i + n), libre: libres.has(c) }));
+}
+
 /** Fechas abiertas desde mañana (o desde una fecha dada, sin incluirla), ordenadas. */
 export function fechasAbiertas(agenda = {}, { ahora = Date.now(), despuesDe = null } = {}) {
   const hoy = diaISO(ahora);
@@ -207,7 +239,7 @@ export function nuevasOfertas(esperas = {}, agenda = {}, ocupacion = {}, { ahora
   }
   return out;
 }
-const E_OK = (e) => ['veda', 'vcc', 'doble'].includes(e.tipo);
+const E_OK = (e) => ['veda', 'vcc', 'rsc', 'doble'].includes(e.tipo);
 
 /* ---------- Código del turno ---------- */
 const ALFA = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // sin 0/O ni 1/I para que no se confundan
@@ -248,9 +280,10 @@ export function factores(datos = {}, extra = {}) {
 }
 
 /** Avisos para el médico (se muestran en su lista de turnos). */
-export function alertasMedico(datos = {}) {
+export function alertasMedico(datos = {}, { tipo, config = {}, edad } = {}) {
   const a = datos.antecedentes || {};
   const out = [];
+  if (['vcc', 'doble'].includes(tipo) && PREPARACIONES[config.preparacion]?.fosfato && (a.renal || a.corazon || (edad ?? 0) >= 65)) out.push('Fosfo-Dom NO recomendado (edad ≥ 65, riñón o corazón): indicar polietilenglicol');
   if (a.anticoagulante) out.push('Anticoagulado: indicar manejo periendoscópico');
   if (a.antiagregante) out.push('Antiagregado: evaluar si se hará polipectomía');
   if (a.glp1) out.push('Usa agonista de GLP-1: dieta líquida 24 h');
@@ -274,20 +307,23 @@ const presentarse = (h) => deMin(Math.max(0, aMin(h) - 30));
 export function documentos({ paciente = {}, turno, datos = {}, config = {}, extra = {} }) {
   const e = ESTUDIOS[turno.tipo];
   const f = factores(datos, extra);
-  const colon = turno.tipo !== 'veda';
-  const alta = turno.tipo !== 'vcc';
+  const colon = ['vcc', 'doble'].includes(turno.tipo);
+  const alta = ['veda', 'doble'].includes(turno.tipo);
+  const rsc = turno.tipo === 'rsc';
+  const sedacion = !rsc || !!config.rscSedacion;
   const prep = PREPARACIONES[config.preparacion] || PREPARACIONES.peg4;
   const diaAntes = diaISO(new Date(`${turno.fecha}T12:00:00`).getTime() - MS_DIA);
   const tresAntes = diaISO(new Date(`${turno.fecha}T12:00:00`).getTime() - 3 * MS_DIA);
   const tarde = aMin(turno.hora) >= 12 * 60;
   const med = config.medico || {};
+  const edadP = paciente.edad ?? (paciente.fechaNac ? Math.floor((Date.now() - new Date(`${paciente.fechaNac}T12:00:00`)) / 31557600000) : null);
 
   /* Resumen corto (lo primero que lee el paciente) */
   const resumen = [
     `${e.nombre}: ${e.queEs}`,
-    `Dura ${e.dura}. Se hace con sedación a cargo de un anestesiólogo: vas a estar dormido/a y sin dolor.`,
+    sedacion ? `Dura ${e.dura}. Se hace con sedación a cargo de un anestesiólogo: vas a estar dormido/a y sin dolor.` : `Dura ${e.dura}. Habitualmente se hace sin sedación: podés sentir algo de presión o gases, pero es tolerable y te vas por tus propios medios.`,
     `Presentate a las ${hora(presentarse(turno.hora))} (30 minutos antes) en ${config.lugar?.nombre || 'el servicio de endoscopia'}${config.lugar?.direccion ? `, ${config.lugar.direccion}` : ''}, con DNI, credencial de tu cobertura, este código y los estudios prequirúrgicos.`,
-    'Vení con un adulto que te acompañe y te lleve de vuelta: después de la sedación no podés manejar ni irte solo/a.',
+    sedacion ? 'Vení con un adulto que te acompañe y te lleve de vuelta: después de la sedación no podés manejar ni irte solo/a.' : 'Sin sedación podés venir solo/a y volver manejando.',
   ];
 
   /* Preparación paso a paso */
@@ -301,14 +337,26 @@ export function documentos({ paciente = {}, turno, datos = {}, config = {}, extr
     ] });
     pasos.push({ cuando: `El ${fechaCorta(diaAntes)} (día anterior)`, que: [
       'Desayuno y almuerzo livianos bajos en residuos. Después del almuerzo, SOLO líquidos claros: agua, caldo colado, té o café sin leche, jugos sin pulpa, bebidas deportivas, gelatina (no roja ni violeta).',
+      prep.dieta || null,
       `Preparación indicada: ${prep.nombre}.`,
-      `Primera toma: ${prep.tarde}.`,
+      prep.fosfato && !tarde ? `Tomas: ${prep.tarde}.` : `Primera toma: ${tarde && prep.tardeT ? prep.tardeT : prep.tarde}.`,
+      prep.fosfato ? 'Tomá mucho líquido claro durante toda la preparación: el fosfato deshidrata. Si tenés mareos fuertes, vómitos o no orinás, consultá.' : null,
       'Es normal tener muchas deposiciones: quedate cerca del baño, usá crema protectora y caminá entre vaso y vaso si te da náuseas.',
     ] });
     pasos.push({ cuando: `El ${fechaCorta(turno.fecha)} (día del estudio)`, que: [
-      `Segunda toma: ${prep.manana}.${tarde ? '' : ' Si tu turno es muy temprano, consultá si conviene tomarla de madrugada o toda la tarde anterior.'}`,
+      prep.fosfato && !tarde ? 'No hay más tomas: ya tomaste las dos el día anterior. Seguí con líquidos claros.' : `Segunda toma: ${tarde && prep.mananaT ? prep.mananaT : prep.manana}.${tarde || prep.fosfato ? '' : ' Si tu turno es muy temprano, consultá si conviene tomarla de madrugada o toda la tarde anterior.'}`,
       'La preparación está bien cuando lo que sale es líquido claro, amarillento y sin restos (como té). Si sigue saliendo marrón o con restos, avisá en Admisión.',
       'Hasta 2 horas antes podés tomar líquidos claros. En las 2 horas previas, nada por boca (ni agua, ni chicles, ni caramelos).',
+    ] });
+  } else if (rsc) {
+    const pr = PREP_RSC[config.prepRsc] || PREP_RSC.enema2;
+    pasos.push({ cuando: `El ${fechaCorta(diaAntes)} (día anterior)`, que: ['Comidas livianas; cená temprano y sin verduras ni frutas.', 'Comprá en la farmacia el enema de fosfato de sodio (por ejemplo Fleet o Enemol).'] });
+    pasos.push({ cuando: `El ${fechaCorta(turno.fecha)} (día del estudio)`, que: [
+      ...(sedacion
+        ? [`Como el estudio es con sedación: ayuno de sólidos desde las ${hora(deMin(Math.max(0, aMin(turno.hora) - 8 * 60)))} y líquidos claros solo hasta las ${hora(deMin(Math.max(0, aMin(turno.hora) - 2 * 60)))}.`]
+        : ['Podés tomar un desayuno liviano (té o café, tostadas). Después del enema no comas nada.']),
+      `Preparación indicada: ${pr.nombre}.`, ...pr.pasos,
+      'Si tenés enfermedad renal o hemorroides muy dolorosas, avisá antes: puede cambiarse por enemas de agua tibia.',
     ] });
   } else {
     pasos.push({ cuando: `El ${fechaCorta(diaAntes)} (día anterior)`, que: [
@@ -321,12 +369,13 @@ export function documentos({ paciente = {}, turno, datos = {}, config = {}, extr
       'Nada de chicles, caramelos ni cigarrillos esa mañana.',
     ] });
   }
+  pasos.forEach((p) => { p.que = p.que.filter(Boolean); });
   pasos.push({ cuando: 'Para llevar', que: [
     'DNI, credencial de la cobertura y la orden médica si tu cobertura la pide.',
-    'Los resultados del laboratorio, el ECG con informe y la valoración anestesiológica.',
+    sedacion ? 'Los resultados del laboratorio, el ECG con informe y la valoración anestesiológica.' : null,
     'Estudios endoscópicos anteriores, si tenés.',
     'Ropa cómoda, sin alhajas ni piercings; uñas sin esmalte; sacate las prótesis dentales antes de entrar.',
-  ] });
+  ].filter(Boolean) });
 
   /* Recomendaciones según las guías y los factores del paciente */
   const rec = [];
@@ -336,33 +385,38 @@ export function documentos({ paciente = {}, turno, datos = {}, config = {}, extr
   if (f.glp1) rec.push({ tono: 'aviso', titulo: 'Semaglutida, tirzepatida y otros GLP-1', texto: 'Estos medicamentos vacían el estómago más lento. La guía multisocietaria 2024 aconseja, en la mayoría de los casos, seguir con el tratamiento y hacer dieta solo líquida las 24 horas previas. Si ese día tenés náuseas, vómitos o hinchazón, avisá en Admisión: puede ser necesario reprogramar. Tu médico puede indicarte saltear la dosis semanal previa.' });
   if (f.insulina) rec.push({ tono: 'aviso', titulo: 'Insulina', texto: 'La noche anterior usá la mitad de la dosis de insulina lenta y la mañana del estudio no te apliques la rápida. Medí tu glucemia al levantarte y llevá caramelos por si baja: si tenés menos de 70 mg/dL, tomá un vaso de jugo azucarado (es líquido claro) y avisá. Confirmá la dosis con tu médico.' });
   if (f.antidiabeticos) rec.push({ tono: 'aviso', titulo: 'Pastillas para la diabetes', texto: 'La mañana del estudio no las tomes; retomalas cuando vuelvas a comer. Si tomás dapagliflozina, empagliflozina o similares (gliflozinas), en general se suspenden 3 días antes: consultalo con tu médico.' });
+  if (prep.fosfato && colon && (f.renal || f.corazon || (edadP ?? 0) >= 65)) rec.push({ tono: 'peligro', titulo: 'Fosfo-Dom en tu caso', texto: 'Por tu edad o por problemas de riñón o de corazón, el fosfato de sodio puede afectar los riñones. Antes de tomarlo, confirmá con tu médico: muchas veces se cambia por polietilenglicol.' });
+  if (prep.fosfato && colon) rec.push({ tono: 'aviso', titulo: 'Fosfato de sodio (Fosfo-Dom)', texto: 'Si tomás remedios para la presión (enalapril, losartán, diuréticos), antiinflamatorios o tenés diabetes, avisale al médico antes de tomarlo. Tomá mucho líquido claro y no repitas la dosis por tu cuenta.' });
   if (f.renal && colon) rec.push({ tono: 'aviso', titulo: 'Riñones', texto: 'Como tenés enfermedad renal, no uses preparaciones con fosfato de sodio. El polietilenglicol es la opción segura.' });
   if (f.constipacion && colon) rec.push({ tono: 'aviso', titulo: 'Constipación', texto: 'Con constipación crónica conviene empezar la dieta baja en residuos 5 días antes y sumar la preparación reforzada que indique tu médico.' });
   if (f.apnea) rec.push({ tono: 'info', titulo: 'Apnea del sueño', texto: 'Si usás CPAP, llevalo. Avisale al anestesiólogo.' });
   if (f.marcapasos) rec.push({ tono: 'info', titulo: 'Marcapasos o cardiodesfibrilador', texto: 'Llevá la credencial del dispositivo y el último control.' });
   if (f.embarazo) rec.push({ tono: 'peligro', titulo: 'Embarazo', texto: 'Avisá a tu médico antes del estudio: puede cambiar la indicación o el momento.' });
   if (f.latex) rec.push({ tono: 'aviso', titulo: 'Látex', texto: 'Recordalo en Admisión para que preparen material sin látex.' });
+  if (config.extra?.[turno.tipo]) rec.unshift({ tono: 'info', titulo: 'Indicaciones del consultorio', texto: String(config.extra[turno.tipo]).slice(0, 1500) });
   rec.push({ tono: 'info', titulo: 'Después del estudio', texto: 'Durante 24 horas no manejes, no uses máquinas peligrosas, no tomes alcohol ni firmes documentos importantes. Es normal sentir gases o la garganta irritada unas horas. Empezá con comidas livianas.' });
   rec.push({ tono: 'peligro', titulo: 'Señales de alarma', texto: 'Dolor abdominal fuerte o que aumenta, fiebre, vómitos, sangrado abundante (más que unas gotas), materia fecal negra, dolor en el pecho o dificultad para respirar o tragar: andá a una guardia o llamá al 107.' });
   rec.push({ tono: 'info', titulo: 'Resultados', texto: 'El informe del estudio se entrega al terminar. Si se toman biopsias, el resultado tarda entre 7 y 15 días y te llega por la sección Estudios de la app.' });
 
   /* Consentimiento informado (Ley 26.529, art. 5) */
   const riesgos = [];
+  if (rsc) riesgos.push('Rectosigmoidoscopia: molestia o sensación de gases (frecuente); sangrado si se toman biopsias o se sacan pólipos (poco frecuente); perforación muy poco frecuente. Los enemas pueden causar cólicos leves.');
   if (alta) riesgos.push('Endoscopia alta: molestia de garganta pasajera (frecuente); sangrado o perforación muy poco frecuentes (menos de 1 cada 10.000 estudios diagnósticos).');
   if (colon) riesgos.push('Colonoscopia: distensión y gases (frecuente); sangrado, sobre todo si se sacan pólipos (alrededor de 1 cada 100 a 300 polipectomías); perforación poco frecuente (1 cada 1.000 a 3.000 estudios, algo más si se sacan pólipos grandes). La preparación puede causar náuseas, mareos o alteraciones de las sales del cuerpo.');
-  riesgos.push('Sedación: baja de la presión o del oxígeno, arritmias, reacciones alérgicas o broncoaspiración (raras y controladas por el anestesiólogo con monitoreo continuo).');
+  if (sedacion) riesgos.push('Sedación: baja de la presión o del oxígeno, arritmias, reacciones alérgicas o broncoaspiración (raras y controladas por el anestesiólogo con monitoreo continuo).');
   riesgos.push('Muy rara vez una complicación puede requerir internación, transfusión, otro procedimiento o una cirugía.');
   if (f.anticoagulante || f.antiagregante) riesgos.push('Por tu medicación anticoagulante o antiagregante, el riesgo de sangrado puede ser mayor.');
   if (f.corazon || f.pulmon || f.apnea) riesgos.push('Por tus antecedentes cardíacos o respiratorios, el riesgo de la sedación puede ser algo mayor; el anestesiólogo lo tiene en cuenta.');
 
   const alternativas = [];
   if (alta) alternativas.push('Para el tubo digestivo alto: seriada esófago-gastro-duodenal con contraste o pruebas no invasivas (aliento para Helicobacter pylori), que no permiten tomar biopsias.');
+  if (rsc) alternativas.push('Colonoscopia completa (estudia todo el colon pero requiere preparación oral y sedación) o estudios por imágenes, que no permiten tomar biopsias.');
   if (colon) alternativas.push('Para el colon: test de sangre oculta en materia fecal, colonografía por tomografía o cápsula endoscópica, que no permiten sacar pólipos y, si muestran algo, requieren igual una colonoscopia.');
 
   const consentimiento = [
-    ['Estudio propuesto', `${e.nombre}. ${e.queEs} Durante el estudio pueden tomarse biopsias (muestras pequeñas e indoloras) y, si hace falta, ${colon ? 'sacarse pólipos (polipectomía), ' : ''}hacer tatuaje endoscópico o tratar un sangrado.`],
+    ['Estudio propuesto', `${e.nombre}. ${e.queEs} Durante el estudio pueden tomarse biopsias (muestras pequeñas e indoloras) y, si hace falta, ${colon || rsc ? 'sacarse pólipos (polipectomía), ' : ''}hacer tatuaje endoscópico o tratar un sangrado.`],
     ['Objetivo y beneficios', 'Diagnosticar la causa de los síntomas, prevenir o detectar a tiempo enfermedades como el cáncer digestivo y, en el mismo acto, tratar lesiones (pólipos o sangrados) sin cirugía.'],
-    ['Sedación', 'El estudio se hace con sedación endovenosa controlada por un médico anestesiólogo, con monitoreo de la presión, el ritmo cardíaco y el oxígeno.'],
+    ['Sedación', sedacion ? 'El estudio se hace con sedación endovenosa controlada por un médico anestesiólogo, con monitoreo de la presión, el ritmo cardíaco y el oxígeno.' : 'El estudio habitualmente se hace sin sedación. Si durante el procedimiento hiciera falta, el equipo médico me lo propondrá.'],
     ['Riesgos y molestias previsibles', riesgos.join(' ')],
     ['Alternativas', alternativas.join(' ')],
     ['Si no me hago el estudio', 'Puede demorarse el diagnóstico o el tratamiento de la causa de mis síntomas o no detectarse a tiempo lesiones precancerosas.'],

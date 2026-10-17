@@ -1272,7 +1272,7 @@ input.otp:focus { transform: translateY(-2px); }
 @media (max-width: 520px) { .orden-pac { grid-template-columns: 1fr; } }
 
 /* Tipo de estudio, fechas y horarios */
-.tipos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.tipos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; }
 @media (max-width: 720px) { .tipos { grid-template-columns: 1fr; } }
 .tipo { position: relative; display: grid; gap: 4px; text-align: left; padding: 18px; border-radius: 22px; cursor: pointer; border: 2px solid var(--line); background: var(--surface); box-shadow: var(--shadow); transition: transform .2s, border-color .2s; }
 .tipo strong { font: 800 26px var(--fn); background: linear-gradient(135deg, var(--c1), var(--c2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -1479,3 +1479,71 @@ input.otp:focus { transform: translateY(-2px); }
 .sello dl div { display: grid; grid-template-columns: 170px 1fr; gap: 8px; } .sello dt { color: var(--text-2); } .sello dd { margin: 0; font-weight: 650; min-width: 0; }
 .sello-hash { overflow-wrap: anywhere; font-size: 12px; }
 @media (max-width: 520px) { .sello dl div { grid-template-columns: 1fr; gap: 0; } }
+/* Horarios libres / ocupados y grilla del médico */
+.leyenda-horas { display: flex; gap: 14px; font-size: 12.5px; color: var(--text-2); margin-bottom: 8px; }
+.leyenda-horas span::before { content: ''; display: inline-block; width: 11px; height: 11px; border-radius: 4px; margin-right: 6px; vertical-align: -1px; }
+.ley-libre::before { background: var(--ok); } .ley-ocupado::before { background: var(--line-2); }
+.hora--ocupada { opacity: .5; cursor: not-allowed; background: var(--surface-3); text-decoration: line-through; }
+.hora--ocupada small { text-decoration: none; }
+.hora:not(.hora--ocupada):not([aria-pressed="true"]) small { color: var(--ok); font-weight: 650; }
+.grilla-dia { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.celda { display: grid; gap: 1px; text-align: left; padding: 10px 12px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface-2); min-width: 0; }
+.celda strong { font-size: 16px; } .celda span { font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .celda small { font-size: 11.5px; color: var(--text-2); }
+.celda--libre { border-style: dashed; color: var(--ok); }
+.celda--ocupada { cursor: pointer; border-color: transparent; border-left: 5px solid var(--c1, #ec4899); background: color-mix(in srgb, var(--c1, #ec4899) 10%, var(--surface)); }
+.espera-bloque { display: grid; gap: 10px; }
+.espera-anon { display: grid; gap: 8px; padding: 14px 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
+.espera-anon ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.espera-anon li { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; }
+.espera-anon li .num { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-3); font-weight: 700; }
+.espera-anon li.yo { background: color-mix(in srgb, #7c3aed 14%, var(--surface)); font-weight: 750; }
+.espera-anon li.yo .num { color: #fff; background: linear-gradient(135deg, #7c3aed, #ec4899); }
+.espera-anon li small { color: var(--text-3); }
+/* Pacientes por prioridad endoscópica */
+.grupo-prio { display: grid; gap: 8px; padding: 12px; border-radius: 20px; border: 1.5px solid color-mix(in srgb, var(--c1) 35%, var(--line)); background: linear-gradient(160deg, color-mix(in srgb, var(--c1) 8%, var(--surface)), var(--surface) 70%); }
+.grupo-prio + .grupo-prio { margin-top: 12px; }
+.grupo-prio-cab { display: flex; gap: 10px; align-items: center; padding: 4px 6px 6px; }
+.grupo-prio-cab strong { color: var(--c1); font-size: 15px; }
+.grupo-prio-cab small { color: var(--text-2); flex: 1; }
+.grupo-prio-cab .num { min-width: 30px; height: 30px; border-radius: 99px; display: grid; place-items: center; color: #fff; font-weight: 800; background: linear-gradient(135deg, var(--c1), var(--c2)); }
+.pac-motivos { grid-column: 1 / -1; margin: 6px 0 0; padding-left: 58px; display: grid; gap: 2px; font-size: 12.5px; color: var(--text-2); text-align: left; }
+.pac-prox { font-size: 12px; color: var(--text-2); }
+.criterios-prio { margin-top: 12px; }
+.firma-modo { display: flex; flex-wrap: wrap; gap: 6px; }
+.firma-modo button { display: inline-flex; gap: 6px; align-items: center; padding: 7px 12px; border-radius: 99px; border: 1.5px solid var(--line-2); background: var(--surface); font-weight: 650; font-size: 13px; cursor: pointer; }
+.firma-modo button[aria-pressed="true"] { color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--c1, #ec4899), var(--c2, #f97316)); }
+.firma-escribir[hidden] { display: none; }
+.firma-texto { width: 100%; }
+/* Bandeja de envíos */
+.envios { display: grid; gap: 10px; }
+.envio { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 12px; align-items: center; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface-2); }
+.envio--pendiente { border-color: color-mix(in srgb, #f59e0b 50%, var(--line)); background: color-mix(in srgb, #f59e0b 7%, var(--surface)); }
+.envio-ico { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #ec4899, #f97316); }
+.envio-info { display: grid; min-width: 0; } .envio-info span { font-size: 13.5px; } .envio-info small { color: var(--text-3); font-size: 12px; }
+.envio-acc { grid-column: 1 / -1; } .envio-acc .btn { min-height: 34px; padding: 0 12px; font-size: 13px; }
+.editor-envio { display: grid; gap: 12px; }
+.ed-sec { border: 1px solid var(--line); border-radius: 14px; padding: 10px; margin: 0; display: grid; gap: 8px; }
+.ed-cab { display: flex; gap: 8px; } .ed-cab input { flex: 1; font-weight: 700; } .ed-sec textarea { width: 100%; font-size: 13.5px; }
+.plantillas { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.plantilla { display: grid; gap: 8px; padding: 12px; border-radius: 16px; border: 1px solid var(--line); border-top: 4px solid var(--c1); background: var(--surface-2); }
+.plantilla textarea { width: 100%; font-size: 13.5px; }
+.doc-app section { margin: 8px 0; } .doc-app h4 { font-size: 14px; } .doc-app ul { margin: 4px 0 0; padding-left: 18px; color: var(--text-2); font-size: 13.5px; display: grid; gap: 3px; }
+
+/* Documento para el paciente (PDF) */
+.doc-envio { display: grid; gap: 12px; color: #1a1f2b; background: #fff; }
+.doc-cab { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 14px 16px; border-radius: 16px; color: #fff; background: linear-gradient(120deg, #4c1d95, #be185d 55%, #f97316); }
+.doc-marca { display: flex; gap: 8px; align-items: center; } .doc-marca img { width: 44px; height: 44px; border-radius: 12px; background: #fff; }
+.doc-marca strong { display: block; letter-spacing: .14em; } .doc-marca small { opacity: .9; font-size: 11px; }
+.doc-tit h1 { margin: 0; font-size: 17px; } .doc-tit p { margin: 2px 0 0; opacity: .92; font-size: 12.5px; }
+.doc-fecha { font-weight: 700; font-size: 12px; }
+.doc-borrador { margin: 0; padding: 6px 10px; border: 2px dashed #f59e0b; border-radius: 10px; color: #b45309; font-weight: 800; font-size: 11.5px; letter-spacing: .06em; text-align: center; }
+.doc-sec { border-radius: 14px; padding: 10px 14px; border: 1px solid #e5e7eb; border-left: 6px solid var(--dc, #0891b2); break-inside: avoid; page-break-inside: avoid; }
+.doc-sec--0 { --dc: #0891b2; } .doc-sec--1 { --dc: #ea580c; } .doc-sec--2 { --dc: #7c3aed; } .doc-sec--3 { --dc: #be185d; } .doc-sec--4 { --dc: #475569; }
+.doc-sec h2 { display: flex; gap: 8px; align-items: center; margin: 0 0 6px; font-size: 14px; color: var(--dc); }
+.doc-ico { font-size: 16px; }
+.doc-sec ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 12.5px; line-height: 1.45; }
+.doc-pie { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb; font-size: 10.5px; color: #64748b; }
+@media print {
+  html.imprimiendo #informe-impresion .doc-envio { font: 10pt/1.4 "Helvetica Neue", Arial, sans-serif; }
+  html.imprimiendo #informe-impresion .doc-cab, html.imprimiendo #informe-impresion .ticket { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

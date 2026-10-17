@@ -22,7 +22,7 @@ const limpiar = (s, n = 120) => String(s ?? '').trim().replace(/\s+/g, ' ').slic
 export const CONFIG_DEFECTO = {
   medico: { nombre: '', matricula: '', especialidad: 'Gastroenterología y endoscopia digestiva', firma: null },
   lugar: { nombre: 'Servicio de Endoscopia Digestiva', direccion: '' },
-  preparacion: 'peg4', validez: { ...E.VALIDEZ_DEFECTO }, minutos: 30,
+  preparacion: 'peg4', prepRsc: 'enema2', rscSedacion: false, revisarEnvios: true, extra: {}, validez: { ...E.VALIDEZ_DEFECTO }, minutos: 30,
 };
 export const configCompleta = (c) => ({ ...CONFIG_DEFECTO, ...(c || {}), medico: { ...CONFIG_DEFECTO.medico, ...(c?.medico || {}) }, lugar: { ...CONFIG_DEFECTO.lugar, ...(c?.lugar || {}) }, validez: { ...E.VALIDEZ_DEFECTO, ...(c?.validez || {}) } });
 
@@ -66,7 +66,7 @@ export async function registrarOrdenes(uid, ids) {
 /** Reserva el turno: ocupa los cupos, crea el turno y su estado público en una sola escritura. */
 /** Huella SHA-256 del consentimiento firmado: texto exacto + firma + aclaración + turno original. */
 export function huellaConsentimiento(c, codigo, tipo) {
-  return sha256hex(JSON.stringify({ v: c.version, texto: c.texto, firma: c.firma || '', aclaracion: c.aclaracion || '', codigo, tipo, fecha: c.paraFecha, hora: c.paraHora }));
+  return sha256hex(JSON.stringify({ v: c.version, texto: c.texto, firma: c.firma || '', aclaracion: c.aclaracion || '', ...(c.metodo ? { metodo: c.metodo } : {}), codigo, tipo, fecha: c.paraFecha, hora: c.paraHora }));
 }
 /** ¿El consentimiento guardado sigue igual al que se firmó? (y, en producción, coincide con el sello del servidor) */
 export async function verificarConsentimiento(t) {
@@ -79,12 +79,12 @@ export async function verificarConsentimiento(t) {
   return { estado: 'integro', sello };
 }
 
-export async function reservar(uid, perfil, { tipo, fecha, libre, datos, pre, firma, aclaracion, config, textoConsentimiento = [], reemplaza, enEspera }) {
+export async function reservar(uid, perfil, { tipo, fecha, libre, datos, pre, firma, metodoFirma, aclaracion, config, textoConsentimiento = [], reemplaza, enEspera }) {
   const id = B().nuevaClave();
   const codigo = E.nuevoCodigo();
   const ahora = B().TS;
   const consentimiento = {
-    aceptado: true, version: 'endo-2026-10', fecha: ahora, firma, aclaracion: limpiar(aclaracion, 80),
+    aceptado: true, version: 'endo-2026-10', fecha: ahora, firma, metodo: metodoFirma === 'teclado' ? 'teclado' : 'trazo', aclaracion: limpiar(aclaracion, 80),
     texto: textoConsentimiento.map(([a, b]) => `${a}: ${b}`).join('\n').slice(0, 12000), paraFecha: fecha, paraHora: libre.hora, algoritmo: 'SHA-256',
   };
   consentimiento.huella = await huellaConsentimiento(consentimiento, codigo, tipo);
@@ -93,7 +93,7 @@ export async function reservar(uid, perfil, { tipo, fecha, libre, datos, pre, fi
   c[`turnosEndo/${uid}/${id}`] = {
     codigo, tipo, fecha, hora: libre.hora, cupos: libre.cupos, estado: 'confirmado', reprogramaciones: 0,
     paciente: { n: `${perfil.apellido}, ${perfil.nombre}`, d3: String(perfil.dni || '').slice(-3) },
-    datos: limpiarDatos(datos), pre: limpiarPre(pre), alertas: E.alertasMedico(datos),
+    datos: limpiarDatos(datos), pre: limpiarPre(pre), alertas: E.alertasMedico(datos, { tipo, config, edad: perfil.fechaNac ? Math.floor((Date.now() - new Date(`${perfil.fechaNac}T12:00:00`)) / 31557600000) : null }),
     consentimiento,
     medico: limpiar(config?.medico?.nombre, 80) || null,
     creado: ahora, historial: { [B().nuevaClave()]: { cuando: ahora, que: 'Turno otorgado y confirmado', por: 'paciente' } },
@@ -101,7 +101,7 @@ export async function reservar(uid, perfil, { tipo, fecha, libre, datos, pre, fi
   c[`estadoTurno/${codigo}`] = { t: id, estado: 'confirmado', tipo, fecha, hora: libre.hora, reprogramaciones: 0, actualizado: ahora };
   try { await B().actualizar('', c); }
   catch (e) { if (/permission|PERMISSION/i.test(`${e.code} ${e.message}`)) throw Object.assign(new Error('ocupado'), { code: 'endo/ocupado' }); throw e; }
-  if (enEspera) await B().borrar(`esperaEndo/${uid}`).catch(() => {});
+  if (enEspera) await salirEspera(uid, enEspera).catch(() => {});
   if (reemplaza?.t && E.turnoActivo(reemplaza.t)) await cancelarTurno(uid, reemplaza.id, reemplaza.t, 'paciente-adelanto').catch((e) => console.warn(e));
   await auditar(uid, 'turno-endoscopia');
   return { id, codigo, huella: consentimiento.huella, fechaFirma: Date.now() };
@@ -119,11 +119,20 @@ export async function cancelarTurno(uid, id, t, por = 'paciente') {
 }
 
 /* ---------- Lista de espera ---------- */
-export async function anotarEspera(uid, { tipo, antesDe = null, turno = null }) {
-  await B().escribir(`esperaEndo/${uid}`, { tipo, antesDe, turno, creado: B().TS });
+/** Anota al paciente. Además se guarda una copia ANÓNIMA (esperaAnon) para que los pacientes vean su puesto sin ver a nadie. */
+export async function anotarEspera(uid, { tipo, antesDe = null, turno = null }, previa = null) {
+  const anon = B().nuevaClave();
+  const c = {
+    [`esperaEndo/${uid}`]: { tipo, antesDe, turno, creado: B().TS, anon },
+    [`esperaAnon/${anon}`]: { tipo, creado: B().TS },
+  };
+  if (previa?.anon) c[`esperaAnon/${previa.anon}`] = null;
+  await B().actualizar('', c);
   B().avisarEspera?.();
 }
-export const salirEspera = (uid) => B().borrar(`esperaEndo/${uid}`);
+export async function salirEspera(uid, e) {
+  await B().actualizar('', { [`esperaEndo/${uid}`]: null, ...(e?.anon ? { [`esperaAnon/${e.anon}`]: null } : {}) });
+}
 export async function rechazarOferta(uid, e) {
   await B().actualizar('', { [`esperaEndo/${uid}/oferta`]: null, [`esperaEndo/${uid}/ofrecidos/${e.oferta.fecha}_${e.oferta.hora}`]: B().TS });
   B().avisarEspera?.();
@@ -237,6 +246,23 @@ export async function leerEstadoPublico(codigo) {
   const c = E.normalizarCodigo(codigo);
   if (!E.codigoValido(c)) return null;
   try { return await B().leer(`estadoTurno/${c}`); } catch { return null; }
+}
+
+/* ---------- Bandeja de envíos: el médico revisa (PDF / Word), edita y aprueba antes de mandar ---------- */
+export async function encolarEnvio(datos) {
+  const { qr, ...resto } = datos;
+  const u = B().usuario();
+  return B().agregar('enviosEndo', { ...JSON.parse(JSON.stringify(resto)), estado: 'pendiente', creado: B().TS, por: u?.paciente ? 'paciente' : 'consultorio' });
+}
+export const guardarEdicionEnvio = (id, secciones) => B().actualizar('', { [`enviosEndo/${id}/secciones`]: secciones, [`enviosEndo/${id}/editado`]: B().TS });
+export const descartarEnvio = (id) => B().actualizar('', { [`enviosEndo/${id}/estado`]: 'descartado', [`enviosEndo/${id}/cerrado`]: B().TS });
+export async function marcarEnviado(id, envio) {
+  const c = { [`enviosEndo/${id}/estado`]: 'enviado', [`enviosEndo/${id}/cerrado`]: B().TS };
+  if (envio.pac && envio.turno) {
+    c[`turnosEndo/${envio.pac}/${envio.turno}/docsAprobados`] = { tipo: envio.tipo, secciones: envio.secciones, fecha: B().TS };
+    c[`turnosEndo/${envio.pac}/${envio.turno}/historial/${B().nuevaClave()}`] = { cuando: B().TS, que: 'Documentación revisada por el médico y enviada por correo', por: 'consultorio' };
+  }
+  await B().actualizar('', c);
 }
 
 /* ---------- Correos e IA (servidor de Apps Script; en la demo se muestran en pantalla) ---------- */

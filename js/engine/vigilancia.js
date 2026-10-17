@@ -82,14 +82,26 @@ export function evaluarBaja(b = {}, { edad } = {}) {
   return out;
 }
 
+/** Rectosigmoidoscopia: si aparecen adenomas, hay que estudiar todo el colon. */
+export function evaluarRsc(b = {}) {
+  const out = [];
+  if (b.neoplasia) out.push(r('muy-alto', 0, 'Lesión sospechosa de cáncer: biopsias, estadificación y colonoscopia completa.', 'ESGE'));
+  if ((+b.adenomas || 0) > 0 || (+b.serrados || 0) > 0 && b.serradoGrande) out.push(r('alto', 3, 'Adenoma (o serrado ≥ 10 mm) en el recto-sigma: completar con una colonoscopia total para estudiar el resto del colon.', 'ESGE / USMSTF'));
+  if (b.preparacion === 'inadecuada') out.push(r('intermedio', 3, 'Preparación inadecuada con enemas: repetir el estudio con mejor preparación.', 'ESGE'));
+  if (b.hiperplasicos && !out.length) out.push(r('bajo', 60, 'Solo pólipos hiperplásicos pequeños: no requiere colonoscopia por este hallazgo; rastreo según edad y antecedentes.', 'ESGE 2020'));
+  if (!out.length) out.push(r('bajo', 60, 'Rectosigmoidoscopia sin hallazgos de riesgo: si fue de rastreo, repetir a los 5 años o pasar a colonoscopia / test de sangre oculta según el programa.', 'USMSTF / ACS'));
+  return out;
+}
+
 /**
  * Resultado completo para un turno.
  * informe: { alta, baja, biopsias, histoCargada, edad }
  */
 export function evaluarVigilancia(tipo, informe = {}, { edad, fechaEstudio } = {}) {
   const partes = [];
-  if (tipo !== 'vcc') partes.push({ id: 'alta', nombre: 'Endoscopia alta', items: evaluarAlta(informe.alta, { edad }) });
-  if (tipo !== 'veda') partes.push({ id: 'baja', nombre: 'Colonoscopia', items: evaluarBaja(informe.baja, { edad }) });
+  if (['veda', 'doble'].includes(tipo)) partes.push({ id: 'alta', nombre: 'Endoscopia alta', items: evaluarAlta(informe.alta, { edad }) });
+  if (['vcc', 'doble'].includes(tipo)) partes.push({ id: 'baja', nombre: 'Colonoscopia', items: evaluarBaja(informe.baja, { edad }) });
+  if (tipo === 'rsc') partes.push({ id: 'rsc', nombre: 'Rectosigmoidoscopia', items: evaluarRsc(informe.baja, { edad }) });
   for (const p of partes) {
     p.riesgo = p.items.reduce((m, x) => (CAT[x.riesgo].orden > CAT[m].orden ? x.riesgo : m), 'bajo');
     const conIntervalo = p.items.filter((x) => Number.isFinite(x.meses));
