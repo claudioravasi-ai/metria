@@ -17,7 +17,7 @@ import { esCorreoCoordinador, uidPaciente } from '../core/cripto.js';
 export const modo = 'demo';
 export const TS = Object.freeze({ '.sv': 'timestamp' });
 
-const DB_NOMBRE = 'metria-demo-v2'; // v2: pacientes con código; la base vieja se descarta
+const DB_NOMBRE = 'metria-demo-v3'; // v3: con turnos de endoscopia; las bases viejas se descartan
 const CLAVE_RELOJ = 'metria-demo-reloj';
 const CLAVE_SESION = 'metria-demo-sesion';
 
@@ -130,10 +130,13 @@ function rol() {
 
 function puedeLeer(ruta) {
   const [a, b, c] = partes(ruta);
+  if (a === 'estadoTurno') return !!b; // estado público del turno (QR): se lee con el código, sin sesión
   const r = rol();
   if (!sesion) return false;
   const med = r.tipo === 'medico' && r.aprobado;
   switch (a) {
+    case 'endoConfig': case 'agendaEndo': case 'ocupacionEndo': return true;
+    case 'turnosEndo': case 'esperaEndo': return med || (b === sesion.uid);
     case 'medicos': return b === sesion.uid || r.titular || (med && !!b);
     case 'medicosEstado': return b === sesion.uid || r.titular;
     case 'indice': case 'estudiosVenc': case 'solicitudesTodas': return med;
@@ -159,10 +162,33 @@ function puedeEscribir(ruta, valor) {
   const med = r.tipo === 'medico' && r.aprobado;
   const propio = b === sesion.uid;
   switch (a) {
+    case 'endoConfig': case 'agendaEndo': return med;
+    case 'esperaEndo': return med || propio;
+    case 'ocupacionEndo': {
+      // un cupo se toma solo si está libre; el paciente solo libera los cupos de sus turnos
+      if (med) return true;
+      const actual = arbol.ocupacionEndo?.[b]?.[c];
+      if (valor === null) return !!actual && !!arbol.turnosEndo?.[sesion.uid]?.[actual];
+      return !actual && typeof valor === 'string';
+    }
+    case 'turnosEndo': {
+      if (med) return true;
+      if (!propio) return false;
+      const t = arbol.turnosEndo?.[b]?.[c];
+      if (!t) return !d && valor !== null; // alta del turno
+      return (d === 'estado' && valor === 'cancelado') || d === 'historial';
+    }
+    case 'estadoTurno': {
+      if (med) return true;
+      const e = arbol.estadoTurno?.[b];
+      if (!e) return !!valor && !c; // se crea junto con el turno
+      return !!arbol.turnosEndo?.[sesion.uid]?.[e.t] && ((c === 'estado' && valor === 'cancelado') || c === 'actualizado');
+    }
     case 'medicos': return propio || r.titular;
     case 'medicosEstado': return r.titular || (propio && !arbol.medicosEstado?.[b] && valor === 'pendiente');
     case 'pacientes':
       if (c === 'plan') return med;
+      if (!c && valor === null) return r.titular; // baja del paciente: solo el coordinador
       return propio || med;
     case 'indice': return propio || med;
     case 'verificados': case 'evaluaciones': return med;
@@ -281,6 +307,11 @@ export function escuchar(ruta, cb) {
   return () => oyentes.get(ruta)?.delete(cb);
 }
 
+/** Igual que en Firebase: solo las claves desde `desde` (fechas futuras). */
+export function escucharDesde(ruta, desde, cb) {
+  return escuchar(ruta, (v) => cb(v ? Object.fromEntries(Object.entries(v).filter(([k]) => k >= String(desde))) : v));
+}
+
 /* ---------- Autenticación ---------- */
 const te = new TextEncoder();
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -357,7 +388,59 @@ export async function ingresarConCodigo(email, codigo, recordar = false) {
   if (cuenta?.hash) throw errorAuth('codigo/es-profesional');
   const uid = cuenta?.uid || (await uidPaciente(e));
   if (!cuenta) await tx('cuentas', 'readwrite', (s) => s.put({ uid, tipo: 'paciente' }, e));
+  // Segundo factor: si ya tiene PIN, se pide antes de abrir la sesión
+  if (cuenta?.pinHash) {
+    const ticket = nuevaClave();
+    tickets.set(e, { ticket, exp: ahora() + 5 * 60000, intentos: 0 });
+    return { pin: 'pedir', ticket };
+  }
+  marcarCrearPin();
   await abrirSesion({ uid, email: e, paciente: true }, recordar);
+  return { pin: 'crear' };
+}
+
+/* Segundo factor de los pacientes: PIN de 6 números (en la demo, con PBKDF2 en este navegador) */
+const tickets = new Map();
+const marcarCrearPin = () => { try { sessionStorage.setItem('metria-crear-pin', '1'); } catch { /* */ } };
+function ticketValido(e, ticket) {
+  const x = tickets.get(e);
+  if (!x || x.ticket !== ticket || x.exp < ahora()) { tickets.delete(e); throw errorAuth('pin/vencido'); }
+  return x;
+}
+export async function ingresarConPin(email, ticket, pin, recordar = false) {
+  const e = normEmail(email);
+  const x = ticketValido(e, ticket);
+  const c = await tx('cuentas', 'readonly', (s) => req(s.get(e)));
+  if (!c?.pinHash || (await derivar(String(pin), c.pinSal)) !== c.pinHash) {
+    x.intentos++;
+    if (x.intentos >= 5) { tickets.delete(e); throw errorAuth('pin/bloqueado'); }
+    throw errorAuth('pin/incorrecto');
+  }
+  tickets.delete(e);
+  await abrirSesion({ uid: c.uid, email: e, paciente: true }, recordar);
+}
+export async function restablecerPin(email, ticket, dni, recordar = false) {
+  const e = normEmail(email);
+  const x = ticketValido(e, ticket);
+  const c = await tx('cuentas', 'readonly', (s) => req(s.get(e)));
+  const per = arbol.pacientes?.[c?.uid]?.perfil;
+  if (!per || String(per.dni) !== String(dni).replace(/\D/g, '')) {
+    x.intentos++;
+    if (x.intentos >= 5) { tickets.delete(e); throw errorAuth('pin/bloqueado'); }
+    throw errorAuth('pin/dni');
+  }
+  tickets.delete(e);
+  await tx('cuentas', 'readwrite', (s) => s.put({ uid: c.uid, tipo: 'paciente' }, e));
+  marcarCrearPin();
+  await abrirSesion({ uid: c.uid, email: e, paciente: true }, recordar);
+}
+export async function crearPin(pin) {
+  if (!sesion?.paciente) throw errorAuth('auth/no-session');
+  const c = await tx('cuentas', 'readonly', (s) => req(s.get(sesion.email)));
+  if (c?.pinHash) throw errorAuth('pin/existe');
+  const pinSal = hex(crypto.getRandomValues(new Uint8Array(16)));
+  const pinHash = await derivar(String(pin), pinSal);
+  await tx('cuentas', 'readwrite', (s) => s.put({ uid: sesion.uid, tipo: 'paciente', pinSal, pinHash }, sesion.email));
 }
 
 export async function salir() {
@@ -412,7 +495,7 @@ export async function sembrar(datos, archivos = {}, cuentas = {}) {
 }
 
 export async function iniciar() {
-  try { indexedDB.deleteDatabase('metria-demo'); } catch { /* versión anterior de la demo */ }
+  try { indexedDB.deleteDatabase('metria-demo'); indexedDB.deleteDatabase('metria-demo-v2'); } catch { /* versiones anteriores de la demo */ }
   idb = await abrir();
   await cargarArbol();
   try {

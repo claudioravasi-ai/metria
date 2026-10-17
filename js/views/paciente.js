@@ -20,14 +20,16 @@ import { vistaTratamientoPaciente } from './tratamiento.js';
 import { vistaPrivacidad } from './legal.js';
 import { vistaManual } from './manual.js';
 import { vistaPlan } from './plan.js';
+import { vistaEndoPaciente, alEntrarEndo } from './endoscopia.js';
+import { turnoActivo, estadoVisible, ESTADOS, ESTUDIOS, fechaCorta, hora as horaTurno, dentroDe48h, faltaTexto } from '../engine/endoscopia.js';
 
-const ITEMS = ['inicio', 'datos', 'plan', 'metabolismo', 'cuerpo', 'corazon', 'laboratorio', 'tratamiento', 'estudios', 'privacidad', 'ayuda'];
-const PRINCIPALES = ['inicio', 'cuerpo', 'corazon', 'estudios'];
+const ITEMS = ['inicio', 'endoscopia', 'datos', 'plan', 'metabolismo', 'cuerpo', 'corazon', 'laboratorio', 'tratamiento', 'estudios', 'privacidad', 'ayuda'];
+const PRINCIPALES = ['inicio', 'endoscopia', 'estudios', 'cuerpo'];
 
 export function appPaciente(perfil, { onSalir }) {
   const B = backend();
   const uid = perfil.uid;
-  const S = { perfil: perfil.datos, pac: {}, estudios: {}, auditoria: {}, verificado: null, listo: { pac: false, est: false } };
+  const S = { perfil: perfil.datos, pac: {}, estudios: {}, auditoria: {}, verificado: null, listo: { pac: false, est: false }, turnos: {}, endoConfig: null, agenda: {}, ocupacion: {}, espera: null };
   let form = null, pendiente = false, programado = false, inicioVisto = false;
   const bajas = [];
 
@@ -53,6 +55,12 @@ export function appPaciente(perfil, { onSalir }) {
     programar();
   }));
   bajas.push(B.escuchar(`estudios/${uid}`, (v) => { S.estudios = v || {}; S.listo.est = true; if (seccion() !== 'datos') programar(); }));
+  // Turnos de endoscopia: los del paciente, la configuración y las fechas abiertas (sin datos de otros pacientes)
+  bajas.push(B.escuchar(`turnosEndo/${uid}`, (v) => { S.turnos = v || {}; if (['endoscopia', 'inicio'].includes(seccion())) programar(); }));
+  bajas.push(B.escuchar(`esperaEndo/${uid}`, (v) => { S.espera = v; if (['endoscopia', 'inicio'].includes(seccion())) programar(); }));
+  bajas.push(B.escuchar('endoConfig', (v) => { S.endoConfig = v; if (seccion() === 'endoscopia') programar(); }));
+  bajas.push(B.escucharDesde('agendaEndo', hoyISO(B.ahora()), (v) => { S.agenda = v || {}; if (seccion() === 'endoscopia') programar(); }));
+  bajas.push(B.escucharDesde('ocupacionEndo', hoyISO(B.ahora()), (v) => { S.ocupacion = v || {}; if (seccion() === 'endoscopia') programar(); }));
   bajas.push(B.escuchar(`auditoria/${uid}`, (v) => { S.auditoria = v || {}; if (seccion() === 'privacidad') programar(); }));
   window.addEventListener('hashchange', render);
   purgarVencidos(perfil).then((n) => n && console.info(`Se borraron ${n} estudios vencidos`));
@@ -74,6 +82,7 @@ export function appPaciente(perfil, { onSalir }) {
   function render() {
     if (!S.listo.pac || detenido) return;
     const id = seccion();
+    if (id === 'endoscopia' && document.getElementById('contenido')?.dataset.sec !== 'endoscopia') alEntrarEndo();
     const ev = evaluarPaciente(S.perfil, S.pac.clinica || {}, new Date(B.ahora()), { planActivo: S.pac.plan?.estado === 'activo' });
     const irDatos = () => ir('datos');
     let contenido;
@@ -89,6 +98,7 @@ export function appPaciente(perfil, { onSalir }) {
       case 'plan': contenido = vistaPlan(ev, { rol: 'paciente' }); break;
       case 'tratamiento': contenido = vistaTratamientoPaciente({ ev, plan: S.pac.plan, tolerancia: S.pac.tolerancia, uid }); break;
       case 'estudios': contenido = vistaEstudiosPaciente({ uid, estudios: S.estudios }); break;
+      case 'endoscopia': contenido = vistaEndoPaciente({ uid, perfil: S.perfil, pac: S.pac, turnos: S.turnos, config: S.endoConfig, agenda: S.agenda, ocupacion: S.ocupacion, espera: S.espera, render: programar }); break;
       case 'privacidad': contenido = vistaPrivacidad({ uid, perfil: S.perfil, auditoria: S.auditoria, estudios: S.estudios }); break;
       case 'ayuda': contenido = vistaManual('paciente'); break;
       default: contenido = inicio(ev);
@@ -98,7 +108,7 @@ export function appPaciente(perfil, { onSalir }) {
     const scroll = window.scrollY;
     const mismo = document.getElementById('contenido')?.dataset.sec === id;
     montar(document.getElementById('app'), marco({
-      items: ITEMS.map((i) => ({ id: i, badge: i === 'estudios' && nuevos ? nuevos : null })),
+      items: ITEMS.map((i) => ({ id: i, badge: i === 'estudios' && nuevos ? nuevos : i === 'endoscopia' && Object.values(S.turnos).filter(turnoActivo).length ? Object.values(S.turnos).filter(turnoActivo).length : null })),
       principales: PRINCIPALES, actual: id, onIr: ir, onSalir: salir,
       usuario: `${S.perfil.nombre} ${S.perfil.apellido}`, rolTexto: 'Paciente',
       extraTop: barraDemo(programar), contenido,
@@ -117,6 +127,8 @@ export function appPaciente(perfil, { onSalir }) {
     const porVencer = lista.filter(([, m]) => estadoEstudio(m).id === 'descargado');
     if (nuevos.length) avisos.push(aviso('ok', h('span', h('strong', `Tenés ${nuevos.length === 1 ? 'un estudio nuevo' : nuevos.length + ' estudios nuevos'}. `), h('button.btn-link', { type: 'button', onclick: () => ir('estudios') }, 'Ver y descargar'))));
     for (const [, m] of porVencer) avisos.push(aviso('aviso', h('span', `«${m.titulo}» se borra en ${duracion(estadoEstudio(m).resta)}. ¿Lo guardaste en tu dispositivo?`)));
+    if (S.espera?.oferta?.vence > B.ahora()) avisos.push(aviso('ok', h('span', h('strong', '¡Se liberó un lugar para tu estudio! '), h('button.btn-link', { type: 'button', onclick: () => ir('endoscopia') }, 'Miralo y tomalo'))));
+    for (const t of Object.values(S.turnos).filter((x) => dentroDe48h(x, B.ahora()))) avisos.push(aviso('aviso', h('span', h('strong', `Tu ${ESTUDIOS[t.tipo].corto} es ${faltaTexto(t, B.ahora())} a las ${horaTurno(t.hora)}. `), h('button.btn-link', { type: 'button', onclick: () => ir('endoscopia') }, 'Repasá la preparación'))));
     if (ev.completitud.pct < 60) avisos.push(aviso('info', h('span', `Tu ficha está al ${ev.completitud.pct} %. `, h('button.btn-link', { type: 'button', onclick: () => ir('datos') }, 'Completala'), ' para que los cálculos sean precisos.')));
     const plan = S.pac.plan;
     if (plan?.estado === 'activo') {
@@ -144,6 +156,7 @@ export function appPaciente(perfil, { onSalir }) {
         h('div.bienvenida-comp', anilloComp, h('small', 'Ficha completa')),
         ecg({ alto: 60 })),
       avisos.length ? h('div.avisos', ...avisos) : null,
+      puertasPortal(lista.length, nuevos.length),
       h('div.bento',
         tile('cuerpo', 'Cuerpo', ev.comp ? h('span', cifra(ev.comp.imc, (v) => fmt(v, 1)), h('small', ' IMC')) : '—', ev.comp ? chip(ev.comp.categoria.nombre, ev.comp.categoria.id === 'normal' ? 'ok' : ['sobrepeso', 'bajo'].includes(ev.comp.categoria.id) ? 'aviso' : 'peligro') : 'Cargá peso y talla', pesos.length > 1 ? G.mini(pesos, 'var(--c1)') : null, true),
         tile('metabolismo', 'Metabolismo', ev.ener ? h('span', cifra(ev.ener.tmb, fmt0), h('small', ' kcal basal')) : '—', ev.ener ? `Gasto total ≈ ${fmt0(ev.ener.get)} kcal/día` : 'Faltan datos'),
@@ -155,6 +168,16 @@ export function appPaciente(perfil, { onSalir }) {
         tile('datos', 'Mis datos', h('strong.num', `${ev.completitud.pct} %`), ev.completitud.faltan.length ? `Falta: ${ev.completitud.faltan.slice(0, 2).join(', ')}` : 'Completo'),
         tile('privacidad', 'Privacidad', h('strong', 'Protegida'), 'Quién vio tus datos')),
       tarjeta('Varios equipos a la vez', { icono: 'dispositivos', clase: 'card--sutil' }, h('p.ayuda', 'Podés usar la app en el teléfono, la tablet y la computadora al mismo tiempo: los cambios se sincronizan solos.')));
+  }
+
+  /** Las dos opciones principales del portal: descargar estudios o pedir un turno de endoscopia. */
+  function puertasPortal(nEst, nNuevos) {
+    const prox = Object.values(S.turnos).filter(turnoActivo).sort((a, b) => a.fecha.localeCompare(b.fecha))[0];
+    const op = (id, titulo, texto, extra, cta) => inclinar(h('button.portal-op', { type: 'button', style: estiloSeccion(id), onclick: () => ir(id) },
+      h('span.portal-op-ico', icono(SECCIONES[id].icono, { tam: 28 })), h('div', h('strong', titulo), h('p', texto), extra), h('span.portal-op-ir', cta, icono('flechaDer', { tam: 16 }))), 5);
+    return h('div.portal-ops',
+      op('estudios', 'Descargar mis estudios', nEst ? `${nEst} ${nEst === 1 ? 'estudio disponible' : 'estudios disponibles'}` : 'Cuando tu médico cargue un estudio, aparece acá.', nNuevos ? chip(`${nNuevos} nuevo${nNuevos > 1 ? 's' : ''}`, 'ok') : null, 'Ver estudios'),
+      op('endoscopia', 'Turno de endoscopia', prox ? `${ESTUDIOS[prox.tipo].corto} · ${fechaCorta(prox.fecha)} · ${horaTurno(prox.hora)} h` : 'Endoscopia alta, baja o ambas: pedilo en 4 pasos.', prox ? chip(ESTADOS[estadoVisible(prox)].nombre, ESTADOS[estadoVisible(prox)].tono) : null, prox ? 'Ver mi turno' : 'Solicitar turno'));
   }
 
   let detenido = false;

@@ -48,6 +48,12 @@ export function escuchar(ruta, cb) {
   return D.onValue(r(ruta), (s) => cb(s.val()), (e) => { console.warn('Sin permiso para', ruta.split('/')[0], e.code); cb(null); });
 }
 
+/** Escucha solo las claves desde `desde` en adelante (p. ej. fechas futuras): baja menos datos. */
+export function escucharDesde(ruta, desde, cb) {
+  const q = D.query(r(ruta), D.orderByKey(), D.startAt(String(desde)));
+  return D.onValue(q, (s) => cb(s.val()), (e) => { console.warn('Sin permiso para', ruta.split('/')[0], e.code); cb(null); });
+}
+
 /* ---------- Autenticación ---------- */
 // Los pacientes entran con un token propio (uid "pac_…") que entrega el servidor de códigos
 // después de comprobar el código enviado a su correo: ese código ya verifica el correo.
@@ -75,14 +81,35 @@ async function servidor(accion, datos) {
     const r = await fetch(CFG.codigosURL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ accion, ...datos }) });
     j = await r.json();
   } catch { throw Object.assign(new Error('red'), { code: 'auth/network-request-failed' }); }
-  if (!j.ok) throw Object.assign(new Error(j.error || 'error'), { code: `codigo/${j.error || 'error'}` });
+  if (!j.ok) throw Object.assign(new Error(j.error || 'error'), { code: String(j.error).startsWith('pin-') ? `pin/${j.error.slice(4)}` : `codigo/${j.error || 'error'}` });
   return j;
 }
 export const pedirCodigo = (email) => servidor('pedir', { email: String(email).trim().toLowerCase() });
-export async function ingresarConCodigo(email, codigo, recordar = false) {
-  const { token } = await servidor('verificar', { email: String(email).trim().toLowerCase(), codigo: String(codigo).replace(/\D/g, '') });
+const marcarCrearPin = () => { try { sessionStorage.setItem('metria-crear-pin', '1'); } catch { /* */ } };
+async function entrarConToken(token, recordar) {
   await A.setPersistence(auth, recordar ? A.browserLocalPersistence : A.browserSessionPersistence);
   await A.signInWithCustomToken(auth, token);
+}
+/** Código del correo (1.er factor). Si el paciente ya tiene PIN, el servidor no entrega el token hasta el PIN (2.º factor). */
+export async function ingresarConCodigo(email, codigo, recordar = false) {
+  const r = await servidor('verificar', { email: String(email).trim().toLowerCase(), codigo: String(codigo).replace(/\D/g, '') });
+  if (r.pin === 'pedir') return { pin: 'pedir', ticket: r.ticket };
+  marcarCrearPin();
+  await entrarConToken(r.token, recordar);
+  return { pin: 'crear' };
+}
+export async function ingresarConPin(email, ticket, pin, recordar = false) {
+  const r = await servidor('pin', { email: String(email).trim().toLowerCase(), ticket, pin: String(pin) });
+  await entrarConToken(r.token, recordar);
+}
+export async function restablecerPin(email, ticket, dni, recordar = false) {
+  const r = await servidor('resetPin', { email: String(email).trim().toLowerCase(), ticket, dni: String(dni).replace(/\D/g, '') });
+  marcarCrearPin();
+  await entrarConToken(r.token, recordar);
+}
+export async function crearPin(pin) {
+  const idToken = await auth.currentUser.getIdToken();
+  await servidor('crearPin', { idToken, pin: String(pin) });
 }
 /** Segunda opinión con IA: el servidor verifica que quien pide sea un médico autorizado. */
 export async function analizarIA(datos) {
@@ -91,6 +118,26 @@ export async function analizarIA(datos) {
   try { return (await servidor('ia', { idToken, datos })).resultado; }
   catch (e) { throw Object.assign(new Error(e.code === 'codigo/no-autorizado' ? 'tu cuenta no está autorizada' : e.code === 'codigo/ia-sin-clave' ? 'falta la clave de Anthropic en el servidor' : 'el servidor no respondió'), { code: e.code }); }
 }
+/** Correo del turno de endoscopia, de las órdenes o de la reprogramación.
+ *  El servidor solo lo manda al correo del paciente dueño del turno (lo comprueba en la base). */
+export async function correoEndo(datos) {
+  if (!CFG.codigosURL) throw Object.assign(new Error('sin servidor'), { code: 'codigo/sin-servidor' });
+  const idToken = await auth.currentUser.getIdToken();
+  return servidor('endoCorreo', { idToken, datos });
+}
+/** Resumen personalizado del estudio con IA para el paciente (sin nombre, DNI ni correo). */
+export async function iaEndo(datos) {
+  if (!CFG.codigosURL) return null;
+  const idToken = await auth.currentUser.getIdToken();
+  return (await servidor('endoIA', { idToken, datos })).resultado;
+}
+/** Sello de tiempo del consentimiento guardado por el servidor (nadie lo puede cambiar desde la app). */
+export async function selloConsentimiento(codigo) {
+  const idToken = await auth.currentUser.getIdToken();
+  return (await servidor('endoSello', { idToken, codigo })).sello || null;
+}
+/** Pide al servidor que ofrezca los lugares libres a la lista de espera (lo hace igual cada hora). */
+export const avisarEspera = () => servidor('endoEspera', {}).catch(() => {});
 /** Le avisa por correo al coordinador que hay profesionales esperando autorización (el servidor lo lee de la base). */
 export const avisarCoordinador = () => servidor('avisoProfesional', {}).catch(() => {});
 export async function restablecer(email) {

@@ -7,7 +7,7 @@ import { toast, cerrarTodos } from './core/ui.js';
 import { CONFIG } from './config.js';
 import { iniciarBackend, perfilDe, backend } from './data/servicio.js';
 import { temaInicial, vigilarInactividad, logo } from './views/shell.js';
-import { portada, pantallaVerificar, pantallaPendiente, pantallaPuertaEquivocada, pantallaCompletarAlta, pantallaCompletarProfesional } from './views/acceso.js';
+import { portada, pantallaVerificar, pantallaPendiente, pantallaPuertaEquivocada, pantallaCompletarAlta, pantallaCompletarProfesional, pantallaCrearPin } from './views/acceso.js';
 import { appPaciente } from './views/paciente.js';
 import { appMedico } from './views/medico.js';
 import './core/instalar.js'; // escucha el aviso de instalación desde el arranque
@@ -22,7 +22,7 @@ async function salir() {
   dejarDeVigilar?.(); dejarDeVigilar = null;
   if (actual) { const a = actual; actual = null; a.detener?.(); }
   cerrarTodos();
-  try { sessionStorage.removeItem('metria-puerta'); } catch { /* */ }
+  try { sessionStorage.removeItem('metria-puerta'); sessionStorage.removeItem('metria-crear-pin'); } catch { /* */ }
   await backend().salir();
 }
 
@@ -55,6 +55,10 @@ async function alCambiar(u) {
   }
   if (puerta && puerta !== perfil.rol) { pantallaPuertaEquivocada(perfil.rol); return; }
   if (perfil.rol === 'medico' && perfil.estado !== 'aprobado') { pantallaPendiente(perfil); return; }
+  // Segundo factor: la primera vez (o después de recuperarlo) el paciente crea su PIN antes de entrar
+  let crearPinPend = false;
+  try { crearPinPend = sessionStorage.getItem('metria-crear-pin') === '1'; } catch { /* */ }
+  if (perfil.rol === 'paciente' && crearPinPend) { pantallaCrearPin(perfil.datos, () => { ultimoUid = undefined; alCambiar(u); }); return; }
   dejarDeVigilar = vigilarInactividad(salir);
   actual = perfil.rol === 'medico' ? appMedico(perfil, { onSalir: salir }) : appPaciente(perfil, { onSalir: salir });
 }
@@ -70,6 +74,13 @@ async function iniciar() {
       const { construirSemilla } = await import('./data/semilla.js');
       const { arbol, archivos, cuentas } = await construirSemilla(B.ahora());
       await B.sembrar(arbol, archivos, cuentas);
+    }
+    // Estado público del turno: el QR del ticket abre ?turno=MTR-XXXX-XXXX
+    const codigo = new URLSearchParams(location.search).get('turno');
+    if (codigo) {
+      const { pantallaEstadoTurno } = await import('./views/endoscopia.js');
+      await pantallaEstadoTurno(codigo, { onEntrar: () => { history.replaceState(null, '', location.pathname); location.reload(); } });
+      return;
     }
     B.alCambiarSesion((u) => { alCambiar(u).catch((e) => { console.error(e); toast('Ocurrió un error al abrir la sesión', 'error'); }); });
   } catch (e) {

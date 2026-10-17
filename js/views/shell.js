@@ -35,7 +35,7 @@ export function logo(variante = 'normal') {
   const v = variante === true ? 'chico' : variante;
   return h(`div.logo.logo--${v}`,
     h('img.logo-marca', { src: v === 'grande' ? 'icons/logo-512.png' : 'icons/logo-256.png', alt: v === 'normal' ? '' : `${CONFIG.app} App`, width: 256, height: 256, decoding: 'async' }),
-    v === 'normal' ? h('div.logo-txt', h('strong', CONFIG.app), h('small', 'Salud cardiometabólica')) : null);
+    v === 'normal' ? h('div.logo-txt', h('strong', CONFIG.app), h('small', 'Salud digestiva')) : null);
 }
 
 /** Indicador de conexión en vivo y de la demo. */

@@ -72,6 +72,19 @@ function ecg() {
   });
 }
 
+/** Firma manuscrita de ejemplo (garabato) para las órdenes de la demo. */
+function firmaDemo() {
+  const c = document.createElement('canvas');
+  c.width = 360; c.height = 110;
+  const x = c.getContext('2d');
+  x.strokeStyle = '#0b1f5c'; x.lineWidth = 2.6; x.lineCap = 'round'; x.lineJoin = 'round';
+  x.beginPath(); x.moveTo(20, 75);
+  for (let i = 0; i <= 60; i++) { const p = i / 60; x.lineTo(20 + p * 300, 70 - Math.sin(p * 18) * 22 * (1 - p * 0.6) - p * 15); }
+  x.stroke();
+  x.beginPath(); x.moveTo(60, 92); x.quadraticCurveTo(200, 80, 330, 88); x.stroke();
+  return c.toDataURL('image/png');
+}
+
 function ecografia() {
   return lienzo(640, 480, (c, w, h) => {
     c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
@@ -216,6 +229,32 @@ export async function construirSemilla(ahora) {
       arbol.auditoria['demo-pac-1'][id()] = { quien: 'demo-pac-1', accion: 'descargo', estudio: eid, cuando: e.descargadoEn };
     }
   }
+  // Endoscopia: médico actuante con firma de ejemplo, fechas abiertas (días hábiles) y un turno de ejemplo
+  arbol.endoConfig = {
+    medico: { nombre: 'Dra. Ana Demo', matricula: 'MN 000000', especialidad: 'Gastroenterología y endoscopia digestiva', firma: firmaDemo() },
+    lugar: { nombre: 'Servicio de Endoscopia (demo)', direccion: 'Av. Ejemplo 1234, 2.º piso' },
+    preparacion: 'peg4', validez: { analitica: 90, ecg: 180, anestesia: 90 }, minutos: 30, autorizaOrdenes: true,
+  };
+  arbol.agendaEndo = {};
+  const dias = [];
+  for (let k = 1; dias.length < 6 && k < 20; k++) {
+    const d = new Date(t + k * MS_DIA);
+    if ([1, 3, 5].includes(d.getDay())) dias.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+  }
+  dias.forEach((f) => { arbol.agendaEndo[f] = { desde: '0800', hasta: '1200', minutos: 30, abierta: t }; });
+  const tid = id();
+  arbol.ocupacionEndo = { [dias[0]]: { '0900': tid, '0930': tid } };
+  const pac2 = PAC[1];
+  arbol.turnosEndo = { [pac2.uid]: { [tid]: {
+    codigo: 'MTR-DEMA-2X7K', tipo: 'doble', fecha: dias[0], hora: '0900', cupos: ['0900', '0930'], estado: 'confirmado', reprogramaciones: 0,
+    paciente: { n: `${pac2.perfil.apellido}, ${pac2.perfil.nombre}`, d3: pac2.perfil.dni.slice(-3) },
+    datos: { cobertura: 'OSDE', afiliado: '61 234567 8 01', telefono: '11 5555-0202', acompNombre: 'María (esposa)', acompTel: '11 5555-0909', motivo: 'control', motivoTexto: '', derivante: '', peso: 113, talla: 176, alergias: '', medicacion: 'Metformina, enalapril', antecedentes: { antidiabeticos: true, apnea: true } },
+    pre: { analitica: { tiene: true, fecha: new Date(t - 10 * MS_DIA).toISOString().slice(0, 10) }, ecg: { tiene: true, fecha: new Date(t - 20 * MS_DIA).toISOString().slice(0, 10), informe: true }, anestesia: { tiene: true, fecha: new Date(t - 5 * MS_DIA).toISOString().slice(0, 10), apto: true } },
+    alertas: [], consentimiento: { aceptado: true, version: 'endo-2026-10', fecha: t - MS_DIA, firma: null, aclaracion: `${pac2.perfil.nombre} ${pac2.perfil.apellido}` },
+    medico: 'Dra. Ana Demo', creado: t - MS_DIA, historial: { [id()]: { cuando: t - MS_DIA, que: 'Turno otorgado y confirmado', por: 'paciente' } },
+  } } };
+  arbol.estadoTurno = { 'MTR-DEMA-2X7K': { t: tid, estado: 'confirmado', tipo: 'doble', fecha: dias[0], hora: '0900', reprogramaciones: 0, actualizado: t - MS_DIA } };
+
   arbol.solicitudes = { 'demo-pac-3': { [id()]: { tipo: 'rectificacion', texto: 'Mi teléfono cambió: 11 5555-0303.', cuando: t - MS_DIA, estado: 'pendiente' } } };
   // Cuentas de pacientes de ejemplo: entran con código (sin contraseña)
   const cuentas = Object.fromEntries(PAC.map((p) => [p.perfil.email, { uid: p.uid, tipo: 'paciente' }]));

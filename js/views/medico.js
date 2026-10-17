@@ -7,11 +7,13 @@
 
 import { h, montar } from '../core/dom.js';
 import { icono } from '../core/iconos.js';
-import { heroe, tarjeta, chip, aviso, toast, confirmar, fmt, fmt0, fecha, fechaHora, vacio, estiloSeccion, SECCIONES, dniMascara, cargando, cerrarTodos } from '../core/ui.js';
+import { hoyISO, heroe, tarjeta, chip, aviso, toast, confirmar, modal, fmt, fmt0, fecha, fechaHora, vacio, estiloSeccion, SECCIONES, dniMascara, cargando, cerrarTodos } from '../core/ui.js';
 import { evaluarPaciente } from '../engine/evaluar.js';
 import { edad as calcEdad } from '../engine/anthro.js';
 import * as GL from '../engine/glp1.js';
-import { backend, purgarVencidos, purgarRetencion, verificarIdentidad, guardarNota } from '../data/servicio.js';
+import { backend, purgarVencidos, purgarRetencion, verificarIdentidad, guardarNota, editarPacienteMedico, borrarPaciente } from '../data/servicio.js';
+import { vistaEndoMedico } from './endoscopia.js';
+import { campo, segmentado } from '../ui/campos.js';
 import { marco, barraDemo, ambiente } from './shell.js';
 import { inclinar } from '../ui/efectos.js';
 import { seccionMetabolismo, seccionCuerpo, seccionCorazon, seccionLaboratorio } from './secciones.js';
@@ -23,6 +25,7 @@ import { vistaPlan } from './plan.js';
 import { imprimirInforme } from './informe.js';
 import { cambioClave, cambioCorreo, POLITICA, TERMINOS, verTexto } from './legal.js';
 
+const CONFIG_APP = 'Metria';
 const RIESGO = { 'muy-alto': ['Muy alto', 'peligro'], alto: ['Alto', 'peligro'], intermedio: ['Intermedio', 'aviso'], limite: ['Limítrofe', 'aviso'], bajo: ['Bajo', 'ok'] };
 const GLP = { indicado: ['Candidato', 'ok'], precaucion: ['Candidato c/ precaución', 'aviso'], 'no-indicado': ['No indicado', 'neutro'], contraindicado: ['Contraindicado', 'peligro'] };
 const PESTANAS = [
@@ -33,20 +36,21 @@ const PESTANAS = [
 
 export function appMedico(perfil, { onSalir }) {
   const B = backend();
-  const S = { indice: {}, solicitudes: {}, medicos: {}, estados: {}, ficha: null, filtro: 'todos', busqueda: '' };
+  const S = { indice: {}, solicitudes: {}, medicos: {}, estados: {}, ficha: null, filtro: 'todos', busqueda: '', endo: { config: null, agenda: {}, ocupacion: {}, turnos: {}, esperas: {} } };
   const bajas = [];
   let bajasFicha = [];
   let form = null, programado = false;
 
   const items = () => [
     { id: 'panel' }, { id: 'pacientes', badge: null },
+    { id: 'endoscopia', badge: Object.values(S.endo.turnos).flatMap((l) => Object.values(l || {})).filter((t) => t.estado === 'suspendido').length || null },
     ...(perfil.titular ? [{ id: 'medicos', badge: Object.values(S.estados).filter((e) => e === 'pendiente').length || null }] : []),
     { id: 'privacidad', nombre: 'Mi cuenta' }, { id: 'ayuda' },
   ];
   const ruta = () => {
     const [a, b] = location.hash.slice(1).split('/');
     if (a === 'ficha' && S.ficha) return { sec: 'pacientes', tab: PESTANAS.some(([k]) => k === b) ? b : 'resumen' };
-    return { sec: ['panel', 'pacientes', 'medicos', 'privacidad', 'ayuda'].includes(a) ? a : 'panel' };
+    return { sec: ['panel', 'pacientes', 'endoscopia', 'medicos', 'privacidad', 'ayuda'].includes(a) ? a : 'panel' };
   };
   const ir = (id) => { if (id !== 'pacientes') cerrarFicha(); if (location.hash.slice(1) === id) render(); else location.hash = id; };
   // Si la persona está escribiendo, el cambio que llega de otro equipo espera a que salga del campo
@@ -63,6 +67,13 @@ export function appMedico(perfil, { onSalir }) {
   }
 
   bajas.push(B.escuchar('indice', (v) => { S.indice = v || {}; if (!S.ficha) programar(); }));
+  // Endoscopia: configuración, agenda, cupos y todos los turnos (en vivo)
+  const endoVivo = () => { if (ruta().sec === 'endoscopia' || ruta().sec === 'panel') programar(); };
+  bajas.push(B.escuchar('endoConfig', (v) => { S.endo.config = v; endoVivo(); }));
+  bajas.push(B.escucharDesde('agendaEndo', hoyISO(B.ahora()), (v) => { S.endo.agenda = v || {}; endoVivo(); }));
+  bajas.push(B.escucharDesde('ocupacionEndo', hoyISO(B.ahora()), (v) => { S.endo.ocupacion = v || {}; endoVivo(); }));
+  bajas.push(B.escuchar('esperaEndo', (v) => { S.endo.esperas = v || {}; endoVivo(); }));
+  bajas.push(B.escuchar('turnosEndo', (v) => { S.endo.turnos = v || {}; endoVivo(); }));
   bajas.push(B.escuchar('solicitudes', (v) => { S.solicitudes = v || {}; if (ruta().sec === 'panel') programar(); }));
   if (perfil.titular) {
     bajas.push(B.escuchar('medicos', (v) => { S.medicos = v || {}; programar(); }));
@@ -104,6 +115,7 @@ export function appMedico(perfil, { onSalir }) {
     let contenido;
     if (r.sec === 'pacientes' && S.ficha) contenido = vistaFicha(r.tab);
     else if (r.sec === 'pacientes') contenido = vistaPacientes();
+    else if (r.sec === 'endoscopia') contenido = vistaEndoMedico({ perfil, indice: S.indice, ...S.endo, abrirFicha, render: programar });
     else if (r.sec === 'medicos' && perfil.titular) contenido = vistaMedicos();
     else if (r.sec === 'privacidad') contenido = vistaCuenta();
     else if (r.sec === 'ayuda') contenido = vistaManual('medico');
@@ -113,7 +125,7 @@ export function appMedico(perfil, { onSalir }) {
     const mismo = document.getElementById('contenido')?.dataset.sec === clave;
     const scroll = window.scrollY;
     montar(document.getElementById('app'), marco({
-      items: items(), principales: ['panel', 'pacientes', 'ayuda'], actual: r.sec, onIr: ir, onSalir: salir,
+      items: items(), principales: ['panel', 'pacientes', 'endoscopia'], actual: r.sec, onIr: ir, onSalir: salir,
       usuario: `${perfil.datos.nombre} ${perfil.datos.apellido}`, rolTexto: `${perfil.datos.matricula.tipo} ${perfil.datos.matricula.numero}${perfil.titular ? ' · Coordinador' : ''}`,
       extraTop: barraDemo(programar), contenido,
     }));
@@ -236,7 +248,9 @@ export function appMedico(perfil, { onSalir }) {
             await verificarIdentidad(F.uid, perfil, true); toast('Identidad verificada', 'ok');
           }
         } }, icono('huella', { tam: 16 }), 'Verificar identidad'),
-        h('button.btn.btn--suave', { type: 'button', onclick: () => imprimirInforme({ ev, F, medico: perfil }) }, icono('imprimir', { tam: 16 }), 'Imprimir informe')));
+        h('button.btn.btn--suave', { type: 'button', onclick: () => imprimirInforme({ ev, F, medico: perfil }) }, icono('imprimir', { tam: 16 }), 'Imprimir informe'),
+        h('button.btn.btn--suave', { type: 'button', onclick: () => editarPaciente(F, per) }, icono('editar', { tam: 16 }), 'Editar'),
+        perfil.titular ? h('button.btn.btn--suave.btn--rojo', { type: 'button', onclick: () => borrarPacienteUI(F, per) }, icono('basura', { tam: 16 }), 'Borrar') : null));
     const nav = h('nav.pestanas', { 'aria-label': 'Secciones de la ficha' }, ...PESTANAS.map(([k, t, ic, sec]) => h('a.pestana', { href: `#ficha/${k}`, 'aria-current': k === tab ? 'page' : null, style: estiloSeccion(sec) }, icono(ic, { tam: 16 }), t,
       k === 'estudios' && Object.keys(F.estudios).length ? h('span.nav-badge', String(Object.keys(F.estudios).length)) : null)));
     const tabs = conFlechas(nav);
@@ -290,6 +304,53 @@ export function appMedico(perfil, { onSalir }) {
       tarjeta('Antecedentes', { icono: 'corazon' }, Object.keys(ev.pat).length ? h('div.chips', ...Object.keys(ev.pat).map((k) => chip(k.replace(/([A-Z])/g, ' $1').toLowerCase(), 'neutro'))) : h('p.ayuda', 'Sin antecedentes cargados.')));
   }
 
+  /* ---------- Editar o borrar un paciente ---------- */
+  function editarPaciente(F, per) {
+    const d = { nombre: per.nombre || '', apellido: per.apellido || '', dni: per.dni || '', fechaNac: per.fechaNac || '', sexo: per.sexo || 'F', telefono: per.telefono || '' };
+    const err = h('div.form-error', { role: 'alert' });
+    const f = (etq, k, props = {}) => { const c = campo(etq, { ...props, value: d[k] }); c.querySelector('input').addEventListener('input', (e) => { d[k] = e.target.value; }); return c; };
+    const m = modal({
+      titulo: 'Editar datos del paciente', ancho: 560,
+      cuerpo: h('div',
+        h('div.grid-form', f('Nombre', 'nombre', { maxlength: 60 }), f('Apellido', 'apellido', { maxlength: 60 }), f('DNI', 'dni', { inputmode: 'numeric', maxlength: 10 }),
+          f('Fecha de nacimiento', 'fechaNac', { type: 'date' }),
+          h('div.campo', h('label', 'Sexo biológico'), segmentado([{ valor: 'F', texto: 'Femenino' }, { valor: 'M', texto: 'Masculino' }], d.sexo, (v) => { d.sexo = v; })),
+          f('Teléfono', 'telefono', { type: 'tel', maxlength: 25 })),
+        h('p.ayuda', `Correo: ${per.email || '—'}. El correo no se cambia desde acá porque es la llave de ingreso del paciente: si cambió, que cree una cuenta nueva con el correo nuevo. Las medidas, la medicación y el laboratorio se editan en la pestaña «Datos».`),
+        err),
+      acciones: [h('button.btn.btn--suave', { type: 'button', onclick: () => m.cerrar() }, 'Cancelar'),
+        h('button.btn.btn--primario', { type: 'button', onclick: async (e) => {
+          const dni = String(d.dni).replace(/\D/g, '');
+          if (!d.nombre.trim() || !d.apellido.trim()) { err.textContent = 'Completá nombre y apellido.'; return; }
+          if (dni.length < 7 || dni.length > 9) { err.textContent = 'Revisá el DNI.'; return; }
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(d.fechaNac)) { err.textContent = 'Revisá la fecha de nacimiento.'; return; }
+          e.target.disabled = true;
+          try { await editarPacienteMedico(F.uid, { ...d, dni }); m.cerrar(); toast('Datos del paciente actualizados', 'ok'); }
+          catch (er) { console.error(er); err.textContent = 'No se pudo guardar.'; e.target.disabled = false; }
+        } }, icono('ok', { tam: 16 }), 'Guardar')],
+    });
+  }
+
+  async function borrarPacienteUI(F, per) {
+    const nombre = `${per.nombre} ${per.apellido}`;
+    const conf = h('input', { type: 'text', autocomplete: 'off', placeholder: per.apellido, id: 'borrar-conf' });
+    const err = h('div.form-error', { role: 'alert' });
+    const m = modal({
+      titulo: 'Borrar paciente', ancho: 520,
+      cuerpo: h('div',
+        aviso('peligro', h('span', h('strong', 'No se puede deshacer. '), `Se borran de ${CONFIG_APP} la ficha, las mediciones, el plan, los estudios, las notas, los pedidos y los turnos de endoscopia de ${nombre} (los turnos futuros se cancelan y el horario queda libre).`)),
+        h('p.ayuda', 'El registro de accesos se conserva (sin datos clínicos) como constancia. La historia clínica oficial del consultorio debe conservarse 10 años (Ley 26.529): descargá antes lo que necesites. Si el paciente pidió la baja (Ley 25.326), respondé dentro de los 5 días hábiles.'),
+        h('div.campo', h('label', { for: 'borrar-conf' }, `Para confirmar, escribí el apellido: ${per.apellido}`), conf), err),
+      acciones: [h('button.btn.btn--suave', { type: 'button', onclick: () => m.cerrar() }, 'Cancelar'),
+        h('button.btn.btn--peligro', { type: 'button', onclick: async (e) => {
+          if (conf.value.trim().toLowerCase() !== String(per.apellido).trim().toLowerCase()) { err.textContent = 'El apellido no coincide.'; return; }
+          e.target.disabled = true; e.target.textContent = 'Borrando…';
+          try { const uid = F.uid; cerrarFicha(); await borrarPaciente(uid); m.cerrar(); location.hash = 'pacientes'; toast(`${nombre} fue borrado/a`, 'ok', 5000); }
+          catch (er) { console.error(er); err.textContent = 'No se pudo borrar. Revisá la conexión y las reglas de Firebase.'; e.target.disabled = false; e.target.textContent = 'Borrar definitivamente'; }
+        } }, icono('basura', { tam: 16 }), 'Borrar definitivamente')],
+    });
+  }
+
   function vistaNotas(F) {
     const ta = h('textarea', { rows: 4, maxlength: 4000, 'aria-label': 'Nueva nota', placeholder: 'Evolución, decisiones, pedidos de estudios… (solo la ven los profesionales)' });
     const btn = h('button.btn.btn--primario', { type: 'button' }, icono('ok', { tam: 16 }), 'Guardar nota');
@@ -302,7 +363,7 @@ export function appMedico(perfil, { onSalir }) {
 
   function vistaAccesos(F) {
     const reg = Object.values(F.auditoria || {}).sort((a, b) => b.cuando - a.cuando);
-    const ACC = { 'alta-cuenta': 'Creó la cuenta', subio: 'Subió un estudio', abrio: 'Abrió un estudio', descargo: 'Descargó un estudio', borro: 'Borró un estudio', 'borrado-automatico': 'Borrado automático', plan: 'Plan indicado', 'verifico-identidad': 'Verificó identidad', 'quito-verificacion': 'Quitó verificación' };
+    const ACC = { 'alta-cuenta': 'Creó la cuenta', subio: 'Subió un estudio', abrio: 'Abrió un estudio', descargo: 'Descargó un estudio', borro: 'Borró un estudio', 'borrado-automatico': 'Borrado automático', plan: 'Plan indicado', 'verifico-identidad': 'Verificó identidad', 'quito-verificacion': 'Quitó verificación', 'turno-endoscopia': 'Turno de endoscopia', 'orden-prequirurgico': 'Órdenes del prequirúrgico', 'informe-endoscopia': 'Informe de endoscopia', 'edito-datos': 'Editó datos personales' };
     const tit = (id) => F.estudios[id]?.titulo || (id ? 'estudio ya borrado' : '');
     return h('div.seccion', heroe('privacidad', 'Registro de accesos', 'Quién abrió, descargó, subió o borró, y cuándo. El paciente ve este mismo registro.'),
       reg.length ? h('ul.auditoria', ...reg.map((r) => h('li', h('span.aud-ico', icono(r.accion === 'descargo' ? 'bajar' : r.accion === 'abrio' ? 'ojo' : 'info', { tam: 16 })),

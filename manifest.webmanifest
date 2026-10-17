@@ -1,7 +1,7 @@
 {
-  "name": "Metria · Salud cardiometabólica",
+  "name": "Metria · Salud digestiva",
   "short_name": "Metria",
-  "description": "Metabolismo, IMC, riesgo cardiovascular, laboratorio, tratamiento y estudios médicos.",
+  "description": "Turnos de endoscopia con ticket QR, estudios médicos, metabolismo, riesgo cardiovascular y tratamiento.",
   "lang": "es-AR",
   "start_url": "./",
   "scope": "./",

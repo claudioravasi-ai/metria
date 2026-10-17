@@ -56,6 +56,18 @@ const limpiar = (s) => String(s ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
 /** Pedido del código de ingreso para pacientes (alta o ingreso: es el mismo paso). */
 export const pedirCodigo = (email) => B.pedirCodigo(email);
 export const ingresarConCodigo = (email, codigo, recordar) => B.ingresarConCodigo(email, codigo, recordar);
+export const ingresarConPin = (email, ticket, pin, recordar) => B.ingresarConPin(email, ticket, pin, recordar);
+export const restablecerPin = (email, ticket, dni, recordar) => B.restablecerPin(email, ticket, dni, recordar);
+export const crearPin = (pin) => B.crearPin(pin);
+/** PIN de 6 números que no sea obvio (no 123456, 000000, ni la fecha de nacimiento). */
+export function pinDebil(pin, fechaNac = '') {
+  const p = String(pin);
+  if (!/^\d{6}$/.test(p)) return 'El PIN tiene que tener 6 números.';
+  if (/^(\d)\1{5}$/.test(p) || '0123456789'.includes(p) || '9876543210'.includes(p)) return 'Es muy fácil de adivinar: evitá números repetidos o seguidos.';
+  const f = String(fechaNac).replace(/-/g, '');
+  if (f && [f.slice(2), f.slice(6, 8) + f.slice(4, 6) + f.slice(2, 4)].includes(p)) return 'No uses tu fecha de nacimiento.';
+  return null;
+}
 
 /**
  * Alta del paciente después de validar el código: completa su perfil.
@@ -141,6 +153,39 @@ export async function actualizarPerfil(uid, campos) {
   if (campos.fechaNac) permitido[`indice/${uid}/nac`] = campos.fechaNac;
   if (campos.sexo) permitido[`indice/${uid}/sx`] = campos.sexo;
   await B.actualizar('', permitido);
+}
+
+/* ---------- Edición y baja de pacientes desde el portal del médico ---------- */
+export async function editarPacienteMedico(uid, d) {
+  const dni = String(d.dni || '').replace(/\D/g, '').slice(0, 9);
+  const c = {
+    [`pacientes/${uid}/perfil/nombre`]: limpiar(d.nombre), [`pacientes/${uid}/perfil/apellido`]: limpiar(d.apellido),
+    [`pacientes/${uid}/perfil/dni`]: dni, [`pacientes/${uid}/perfil/fechaNac`]: d.fechaNac,
+    [`pacientes/${uid}/perfil/sexo`]: d.sexo === 'M' ? 'M' : 'F', [`pacientes/${uid}/perfil/telefono`]: limpiar(d.telefono).slice(0, 25) || null,
+    [`indice/${uid}/n`]: `${limpiar(d.apellido)}, ${limpiar(d.nombre)}`, [`indice/${uid}/d3`]: dni.slice(-3),
+    [`indice/${uid}/nac`]: d.fechaNac, [`indice/${uid}/sx`]: d.sexo === 'M' ? 'M' : 'F',
+  };
+  await B.actualizar('', c);
+  await auditar(uid, 'edito-datos');
+}
+
+/**
+ * Baja de un paciente (solo el coordinador). Cancela sus turnos futuros, libera los cupos
+ * y borra ficha, estudios, notas, pedidos y turnos. El registro de accesos queda como constancia.
+ */
+export async function borrarPaciente(uid) {
+  const turnos = (await B.leer(`turnosEndo/${uid}`).catch(() => null)) || {};
+  const c = {};
+  for (const t of Object.values(turnos)) {
+    if (['confirmado', 'suspendido', 'admitido'].includes(t.estado)) {
+      for (const k of (t.estado === 'suspendido' ? [] : t.cupos || [])) c[`ocupacionEndo/${t.fecha}/${k}`] = null;
+      if (t.codigo) { c[`estadoTurno/${t.codigo}/estado`] = 'cancelado'; c[`estadoTurno/${t.codigo}/actualizado`] = B.TS; }
+    }
+  }
+  for (const r of ['pacientes', 'indice', 'verificados', 'evaluaciones', 'solicitudes', 'estudios', 'estudiosVenc', 'turnosEndo']) c[`${r}/${uid}`] = null;
+  await auditar(uid, 'baja-paciente');
+  await B.borrar(`estudiosArchivos/${uid}`);
+  await B.actualizar('', c);
 }
 
 /* ---------- Auditoría (sin datos clínicos: solo quién, qué y cuándo) ---------- */
