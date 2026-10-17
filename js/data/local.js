@@ -143,7 +143,8 @@ function puedeLeer(ruta) {
     case 'indice': case 'estudiosVenc': case 'solicitudesTodas': return med;
     case 'pacientes': case 'estudios': case 'auditoria': case 'verificados': case 'solicitudes':
       return b === sesion.uid || med;
-    case 'evaluaciones': return med;
+    case 'evaluaciones': case 'indiceDni': return med;
+    case 'seguimiento': return b === sesion.uid || med;
     case 'estudiosArchivos': {
       if (med) return true;
       if (b !== sesion.uid || !c) return false;
@@ -194,7 +195,8 @@ function puedeEscribir(ruta, valor) {
       if (!c && valor === null) return r.titular; // baja del paciente: solo el coordinador
       return propio || med;
     case 'indice': return propio || med;
-    case 'verificados': case 'evaluaciones': return med;
+    case 'verificados': case 'evaluaciones': case 'seguimiento': return med;
+    case 'indiceDni': return med || (valor === sesion.uid && !arbol.indiceDni?.[b]); // el paciente indexa su DNI al darse de alta
     case 'auditoria': return propio || med;
     case 'solicitudes': return propio || med;
     case 'estudios': {

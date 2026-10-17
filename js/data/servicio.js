@@ -21,7 +21,7 @@
 
 import { CONFIG, MS_DIA, MS_HORA } from '../config.js';
 import { evaluarPaciente, resumenIndice } from '../engine/evaluar.js';
-import { esCorreoCoordinador, uidPaciente } from '../core/cripto.js';
+import { esCorreoCoordinador, uidPaciente, sha256hex } from '../core/cripto.js';
 
 let B;
 export const backend = () => B;
@@ -88,6 +88,7 @@ export async function completarAltaPaciente(uid, d) {
   };
   await B.escribir(`pacientes/${uid}/perfil`, perfil);
   await B.escribir(`indice/${uid}`, filaIndice(perfil, null));
+  await indexarDni(uid, perfil.dni);
   await auditar(uid, 'alta-cuenta');
   return uid;
 }
@@ -110,6 +111,12 @@ export async function completarMedico(uid, d) {
   if (!(await B.leer(`medicosEstado/${uid}`).catch(() => null))) await B.escribir(`medicosEstado/${uid}`, 'pendiente');
   B.avisarCoordinador?.(); // correo al coordinador (solo en producción)
   return uid;
+}
+
+/* ---------- Índice por DNI (búsqueda del seguimiento): huella del DNI → uid, solo lo leen los médicos ---------- */
+export async function indexarDni(uid, dni) {
+  const d = String(dni || '').replace(/\D/g, '');
+  if (d.length >= 7) await B.escribir(`indiceDni/${await sha256hex(`metria-dni:${d}`)}`, uid).catch(() => {});
 }
 
 /* ---------- Índice para la lista de pacientes ---------- */
@@ -168,6 +175,7 @@ export async function editarPacienteMedico(uid, d) {
     [`indice/${uid}/nac`]: d.fechaNac, [`indice/${uid}/sx`]: d.sexo === 'M' ? 'M' : 'F',
   };
   await B.actualizar('', c);
+  await indexarDni(uid, dni);
   await auditar(uid, 'edito-datos');
 }
 
@@ -186,7 +194,9 @@ export async function borrarPaciente(uid) {
   }
   const espera = await B.leer(`esperaEndo/${uid}`).catch(() => null);
   if (espera?.anon) c[`esperaAnon/${espera.anon}`] = null;
-  for (const r of ['pacientes', 'indice', 'verificados', 'evaluaciones', 'solicitudes', 'estudios', 'estudiosVenc', 'turnosEndo', 'esperaEndo']) c[`${r}/${uid}`] = null;
+  for (const r of ['pacientes', 'indice', 'verificados', 'evaluaciones', 'solicitudes', 'estudios', 'estudiosVenc', 'turnosEndo', 'esperaEndo', 'seguimiento']) c[`${r}/${uid}`] = null;
+  const per = await B.leer(`pacientes/${uid}/perfil`).catch(() => null);
+  if (per?.dni) c[`indiceDni/${await sha256hex(`metria-dni:${String(per.dni).replace(/\D/g, '')}`)}`] = null;
   await auditar(uid, 'baja-paciente');
   await B.borrar(`estudiosArchivos/${uid}`);
   await B.actualizar('', c);

@@ -98,6 +98,7 @@ export const SECCIONES = {
   plan: { nombre: 'Plan integral', icono: 'objetivo', c1: '#ec4899', c2: '#f59e0b' },
   estudios: { nombre: 'Estudios', icono: 'carpeta', c1: '#10b981', c2: '#84cc16' },
   endoscopia: { nombre: 'Endoscopia', icono: 'endoscopio', c1: '#ec4899', c2: '#f97316' },
+  seguimiento: { nombre: 'Seguimiento', icono: 'calendario', c1: '#0d9488', c2: '#6366f1' },
   privacidad: { nombre: 'Privacidad', icono: 'escudo', c1: '#475569', c2: '#0ea5e9' },
   ayuda: { nombre: 'Ayuda', icono: 'ayuda', c1: '#eab308', c2: '#f97316' },
   pacientes: { nombre: 'Pacientes', icono: 'usuarios', c1: '#6366f1', c2: '#06b6d4' },

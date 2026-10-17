@@ -21,6 +21,7 @@ import { vistaPrivacidad } from './legal.js';
 import { vistaManual } from './manual.js';
 import { vistaPlan } from './plan.js';
 import { vistaEndoPaciente, alEntrarEndo } from './endoscopia.js';
+import { tarjetaControlesPaciente } from './seguimiento.js';
 import { turnoActivo, estadoVisible, ESTADOS, ESTUDIOS, fechaCorta, hora as horaTurno, dentroDe48h, faltaTexto } from '../engine/endoscopia.js';
 
 const ITEMS = ['inicio', 'endoscopia', 'datos', 'plan', 'metabolismo', 'cuerpo', 'corazon', 'laboratorio', 'tratamiento', 'estudios', 'privacidad', 'ayuda'];
@@ -29,7 +30,7 @@ const PRINCIPALES = ['inicio', 'endoscopia', 'estudios', 'cuerpo'];
 export function appPaciente(perfil, { onSalir }) {
   const B = backend();
   const uid = perfil.uid;
-  const S = { perfil: perfil.datos, pac: {}, estudios: {}, auditoria: {}, verificado: null, listo: { pac: false, est: false }, turnos: {}, endoConfig: null, agenda: {}, ocupacion: {}, espera: null, esperaAnon: {} };
+  const S = { perfil: perfil.datos, pac: {}, estudios: {}, auditoria: {}, verificado: null, listo: { pac: false, est: false }, turnos: {}, endoConfig: null, agenda: {}, ocupacion: {}, espera: null, esperaAnon: {}, seg: null };
   let form = null, pendiente = false, programado = false, inicioVisto = false;
   const bajas = [];
 
@@ -57,6 +58,7 @@ export function appPaciente(perfil, { onSalir }) {
   bajas.push(B.escuchar(`estudios/${uid}`, (v) => { S.estudios = v || {}; S.listo.est = true; if (seccion() !== 'datos') programar(); }));
   // Turnos de endoscopia: los del paciente, la configuración y las fechas abiertas (sin datos de otros pacientes)
   bajas.push(B.escuchar(`turnosEndo/${uid}`, (v) => { S.turnos = v || {}; if (['endoscopia', 'inicio'].includes(seccion())) programar(); }));
+  bajas.push(B.escuchar(`seguimiento/${uid}`, (v) => { S.seg = v; if (['endoscopia', 'inicio'].includes(seccion())) programar(); }));
   bajas.push(B.escuchar(`esperaEndo/${uid}`, (v) => { S.espera = v; if (['endoscopia', 'inicio'].includes(seccion())) programar(); }));
   bajas.push(B.escuchar('esperaAnon', (v) => { S.esperaAnon = v || {}; if (seccion() === 'endoscopia') programar(); }));
   bajas.push(B.escuchar('endoConfig', (v) => { S.endoConfig = v; if (seccion() === 'endoscopia') programar(); }));
@@ -99,7 +101,7 @@ export function appPaciente(perfil, { onSalir }) {
       case 'plan': contenido = vistaPlan(ev, { rol: 'paciente' }); break;
       case 'tratamiento': contenido = vistaTratamientoPaciente({ ev, plan: S.pac.plan, tolerancia: S.pac.tolerancia, uid }); break;
       case 'estudios': contenido = vistaEstudiosPaciente({ uid, estudios: S.estudios }); break;
-      case 'endoscopia': contenido = vistaEndoPaciente({ uid, perfil: S.perfil, pac: S.pac, turnos: S.turnos, config: S.endoConfig, agenda: S.agenda, ocupacion: S.ocupacion, espera: S.espera, esperaAnon: S.esperaAnon, render: programar }); break;
+      case 'endoscopia': contenido = vistaEndoPaciente({ uid, perfil: S.perfil, pac: S.pac, turnos: S.turnos, config: S.endoConfig, agenda: S.agenda, ocupacion: S.ocupacion, espera: S.espera, esperaAnon: S.esperaAnon, seg: S.seg, render: programar }); break;
       case 'privacidad': contenido = vistaPrivacidad({ uid, perfil: S.perfil, auditoria: S.auditoria, estudios: S.estudios }); break;
       case 'ayuda': contenido = vistaManual('paciente'); break;
       default: contenido = inicio(ev);
@@ -157,6 +159,7 @@ export function appPaciente(perfil, { onSalir }) {
         h('div.bienvenida-comp', anilloComp, h('small', 'Ficha completa')),
         ecg({ alto: 60 })),
       avisos.length ? h('div.avisos', ...avisos) : null,
+      tarjetaControlesPaciente(S.seg),
       puertasPortal(lista.length, nuevos.length),
       h('div.bento',
         tile('cuerpo', 'Cuerpo', ev.comp ? h('span', cifra(ev.comp.imc, (v) => fmt(v, 1)), h('small', ' IMC')) : '—', ev.comp ? chip(ev.comp.categoria.nombre, ev.comp.categoria.id === 'normal' ? 'ok' : ['sobrepeso', 'bajo'].includes(ev.comp.categoria.id) ? 'aviso' : 'peligro') : 'Cargá peso y talla', pesos.length > 1 ? G.mini(pesos, 'var(--c1)') : null, true),

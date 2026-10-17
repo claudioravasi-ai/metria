@@ -25,6 +25,7 @@ import { logo, alternarTema, barraDemo } from './shell.js';
 import { POLITICA, TERMINOS, verTexto } from './legal.js';
 import { DEMO } from '../data/semilla.js';
 import { botonInstalar } from '../core/instalar.js';
+import { probaloColon } from './colon-probalo.js';
 
 const raiz = () => document.getElementById('app');
 const MSG = {
@@ -198,6 +199,7 @@ export function portada() {
       ecg({ clase: 'hero-ecg' })),
     h('section.cifras', datoContado(10, ' s', 'para ver tu riesgo'), datoContado(30, ' años', 'de proyección del riesgo'), datoContado(6, '', 'tratamientos comparados'), datoContado(72, ' h', 'y tus estudios se borran')),
     probalo(),
+    probaloColon(),
     h('section.funciones-sec',
       h('div.seccion-titulo', { 'data-revelar': '' }, h('span.portada-etiqueta', icono('estrella', { tam: 14 }), 'Todo en un lugar'), h('h2', 'Siete secciones, un color para cada una')),
       h('div.funciones', ...funciones.map(tarjeta))),

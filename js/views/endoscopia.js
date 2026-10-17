@@ -22,6 +22,7 @@ import { qrSVG, qrPNG, puedeEscanear, lectorQR, leerQRImagen } from '../ui/qr.js
 import { panelFirma } from '../ui/firma.js';
 import { logo } from './shell.js';
 import * as V from '../engine/vigilancia.js';
+import { abrirEstudioDesdeTurno, tarjetaControlesPaciente } from './seguimiento.js';
 
 const B = () => backend();
 const urlTurno = (codigo) => `${location.origin}${location.pathname}?turno=${encodeURIComponent(codigo)}`;
@@ -634,7 +635,8 @@ function misTurnos(ctx, ir, cfg, activos) {
         } }, 'Cancelar este turno') : null);
     }),
     h('div.botones', h('button.btn.btn--primario', { type: 'button', onclick: () => ir('datos') }, icono('mas', { tam: 16 }), 'Solicitar otro turno')),
-    ...pasados.filter(([, t]) => t.informe?.resultado).map(([, t]) => tarjeta(`Tu ${E.ESTUDIOS[t.tipo].corto} del ${E.fechaCorta(t.fecha)}: próximo control`, { icono: 'calendario', seccion: 'endoscopia' }, resumenVigilancia(t))),
+    tarjetaControlesPaciente(ctx.seg),
+    ...pasados.filter(([, t]) => t.informe?.resultado && !ctx.seg?.estudios).map(([, t]) => tarjeta(`Tu ${E.ESTUDIOS[t.tipo].corto} del ${E.fechaCorta(t.fecha)}: próximo control`, { icono: 'calendario', seccion: 'endoscopia' }, resumenVigilancia(t))),
     pasados.length ? tarjeta('Turnos anteriores', { icono: 'reloj' }, h('ul.turnos-pasados', ...pasados.map(([, t]) => h('li', h('strong', `${E.ESTUDIOS[t.tipo].corto} · ${E.fechaCorta(t.fecha)}`), chip(E.ESTADOS[t.estado]?.nombre || t.estado, E.ESTADOS[t.estado]?.tono || 'neutro'), h('small.num', t.codigo))))) : null);
 }
 
@@ -664,76 +666,6 @@ export function resumenVigilancia(t, { chico = false } = {}) {
     chico ? null : h('p.ayuda', `Riesgo global: ${cat.nombre.toLowerCase()}. Es una orientación basada en las guías; el intervalo definitivo lo indica tu médico.`));
 }
 
-const segm = (opciones, valor, onChange) => segmentado(opciones.map(([v, t]) => ({ valor: v, texto: t })), valor, onChange, { pequeno: true });
-const casilla = (texto, valor, onChange) => h('label.check', h('input', { type: 'checkbox', checked: !!valor, onchange: (e) => onChange(e.target.checked) }), h('span', texto));
-const numero = (etq, valor, onChange, sufijo) => { const c = campo(etq, { type: 'number', value: valor ?? '', maxlength: 3 }, { sufijo }); c.querySelector('input').addEventListener('input', (e) => onChange(e.target.value)); return c; };
-
-function abrirInforme(x, ctx) {
-  const { t } = x;
-  const inf = JSON.parse(JSON.stringify(t.informe || { alta: {}, baja: {}, biopsias: false, histoCargada: false }));
-  inf.alta ||= {}; inf.baja ||= {};
-  const edad = ctx.indice?.[x.pac]?.nac ? calcEdad(ctx.indice[x.pac].nac, new Date(B().ahora())) : null;
-  const resultado = h('div.vig-vivo');
-  const recalcular = () => {
-    const res = V.evaluarVigilancia(t.tipo, inf, { edad, fechaEstudio: t.fecha });
-    resultado.replaceChildren(resumenVigilancia({ informe: { ...inf, resultado: res } }));
-  };
-  const set = (obj, k) => (v) => { obj[k] = v; recalcular(); };
-  const a = inf.alta, b = inf.baja;
-  let barrett;
-  const alta = !['veda', 'doble'].includes(t.tipo) ? null : tarjeta('Endoscopia alta', { icono: 'endoscopio', seccion: 'endoscopia' },
-    h('div.inf-grid',
-      h('div.campo', h('label', 'Esofagitis (Los Ángeles)'), segm([['no', 'No'], ['A', 'A'], ['B', 'B'], ['C', 'C'], ['D', 'D']], a.esofagitis || 'no', set(a, 'esofagitis'))),
-      casilla('Esófago de Barrett', a.barrett, (v) => { a.barrett = v; barrett.hidden = !v; recalcular(); }),
-      h('div.inf-sub', { hidden: !a.barrett, ref: (el) => { barrett = el; } },
-        numero('Praga C', a.barrettC, set(a, 'barrettC'), 'cm'), numero('Praga M', a.barrettM, set(a, 'barrettM'), 'cm'),
-        h('div.campo.campo--ancho', h('label', 'Displasia (anatomía patológica)'), segm([['sin-dato', 'Sin dato aún'], ['sin', 'Sin displasia'], ['indefinida', 'Indefinida'], ['bajo', 'Bajo grado'], ['alto', 'Alto grado'], ['cancer', 'Cáncer']], a.barrettDisplasia || 'sin-dato', set(a, 'barrettDisplasia')))),
-      h('div.campo', h('label', 'Atrofia / metaplasia gástrica'), segm([['no', 'No'], ['antro', 'Limitada al antro'], ['extensa', 'Extensa (antro y cuerpo)']], a.atrofia || 'no', set(a, 'atrofia'))),
-      h('div.campo', h('label', 'OLGA / OLGIM (anatomía patológica)'), segm([['0', 'Sin dato'], ['1', 'I'], ['2', 'II'], ['3', 'III'], ['4', 'IV']], String(a.olga || 0), (v) => { a.olga = +v; recalcular(); })),
-      h('div.inf-checks',
-        casilla('Metaplasia intestinal incompleta', a.miIncompleta, set(a, 'miIncompleta')),
-        casilla('Familiar de 1.er grado con cáncer gástrico', a.familiarGastrico, set(a, 'familiarGastrico')),
-        casilla('H. pylori persistente', a.hpPersistente, set(a, 'hpPersistente')),
-        casilla('H. pylori positivo', a.hp, set(a, 'hp')),
-        casilla('Úlcera gástrica', a.ulceraGastrica, set(a, 'ulceraGastrica')),
-        casilla('Lesión sospechosa de neoplasia', a.neoplasia, set(a, 'neoplasia'))),
-      h('div.campo', h('label', 'Pólipos gástricos'), segm([['no', 'No'], ['glandulas', 'Glándulas fúndicas'], ['hiperplasicos', 'Hiperplásicos'], ['adenoma', 'Adenoma']], a.poliposGastricos || 'no', set(a, 'poliposGastricos')))));
-  const baja = t.tipo === 'veda' ? null : tarjeta(t.tipo === 'rsc' ? 'Rectosigmoidoscopia' : 'Colonoscopia', { icono: 'endoscopio', seccion: 'endoscopia' },
-    h('div.inf-grid',
-      h('div.campo', h('label', 'Preparación (Boston)'), segm([['adecuada', 'Adecuada (≥ 6 y cada segmento ≥ 2)'], ['inadecuada', 'Inadecuada']], b.preparacion || 'adecuada', set(b, 'preparacion'))),
-      casilla('Incompleta: no se llegó al ciego', b.incompleta, set(b, 'incompleta')),
-      numero('Adenomas', b.adenomas, set(b, 'adenomas')), numero('Pólipos serrados', b.serrados, set(b, 'serrados')),
-      numero('Tamaño del adenoma mayor', b.tamanoMax, set(b, 'tamanoMax'), 'mm'),
-      h('div.inf-checks',
-        casilla('Resección en fragmentos (piecemeal) de pólipo ≥ 20 mm', b.piecemeal, set(b, 'piecemeal')),
-        casilla('Adenoma con displasia de alto grado (AP)', b.displasiaAlta, set(b, 'displasiaAlta')),
-        casilla('Serrado ≥ 10 mm', b.serradoGrande, set(b, 'serradoGrande')),
-        casilla('Serrado con displasia (AP)', b.serradoDisplasia, set(b, 'serradoDisplasia')),
-        casilla('Solo hiperplásicos pequeños de recto-sigma', b.hiperplasicos, set(b, 'hiperplasicos')),
-        casilla('Familiar de 1.er grado con cáncer colorrectal', b.familiarCCR, set(b, 'familiarCCR')),
-        casilla('Lesión sospechosa de cáncer', b.neoplasia, set(b, 'neoplasia')))));
-  const hallazgos = h('textarea', { rows: 3, maxlength: 2000, value: inf.texto || '', placeholder: 'Hallazgos y conducta (texto libre del informe)', 'aria-label': 'Hallazgos', oninput: (e) => { inf.texto = e.target.value; } });
-  const m = modal({
-    titulo: `Informe · ${t.paciente?.n || ''} · ${E.ESTUDIOS[t.tipo].corto}`, ancho: 980, clase: 'modal--texto',
-    cuerpo: h('div.informe-endo',
-      h('div.inf-form', alta, baja,
-        tarjeta('Biopsias y anatomía patológica', { icono: 'matraz', seccion: 'endoscopia' },
-          casilla('Se tomaron biopsias o se resecaron pólipos', inf.biopsias, set(inf, 'biopsias')),
-          casilla('Ya cargué el informe de anatomía patológica (resultado definitivo)', inf.histoCargada, set(inf, 'histoCargada')),
-          h('div.campo', h('label', 'Hallazgos'), hallazgos))),
-      h('aside.inf-resultado', h('h3', 'Riesgo y próximo control'), resultado)),
-    acciones: [h('button.btn.btn--suave', { type: 'button', onclick: () => m.cerrar() }, 'Cancelar'),
-      h('button.btn.btn--primario', { type: 'button', onclick: async (e) => {
-        e.target.disabled = true;
-        try {
-          const res = V.evaluarVigilancia(t.tipo, inf, { edad, fechaEstudio: t.fecha });
-          await D.guardarInforme(x.pac, x.id, t, { ...inf, texto: String(inf.texto || '').slice(0, 2000), resultado: JSON.parse(JSON.stringify(res)) });
-          m.cerrar(); toast(res.provisorio ? 'Informe guardado (provisorio hasta la anatomía patológica)' : 'Informe guardado', 'ok', 5000);
-        } catch (er) { console.error(er); toast('No se pudo guardar el informe', 'error'); e.target.disabled = false; }
-      } }, icono('ok', { tam: 16 }), 'Guardar y avisar al paciente')],
-  });
-  recalcular();
-}
 
 /* ======================= ESTADO PÚBLICO (QR) ======================= */
 
@@ -840,7 +772,7 @@ function filaTurno(x, ctx) {
   if (['confirmado'].includes(t.estado)) acc.push(h('button.btn.btn--primario', { type: 'button', onclick: async () => { await D.marcarEstado(x.pac, x.id, t, 'admitido', 'Admitido en Admisión'); toast('Paciente admitido', 'ok'); } }, icono('ok', { tam: 15 }), 'Admitir'));
   if (t.estado === 'admitido') acc.push(h('button.btn.btn--primario', { type: 'button', onclick: async () => { await D.marcarEstado(x.pac, x.id, t, 'realizado', 'Estudio realizado'); toast('Estudio marcado como realizado', 'ok'); } }, icono('okCirculo', { tam: 15 }), 'Realizado / egreso'));
   if (['confirmado', 'admitido', 'suspendido'].includes(t.estado)) acc.push(h('button.btn.btn--suave', { type: 'button', onclick: () => suspender(x, ctx) }, icono('reloj', { tam: 15 }), t.estado === 'suspendido' ? 'Reintentar reprogramación' : 'Suspender y reprogramar'));
-  if (['admitido', 'realizado'].includes(t.estado)) acc.push(h('button.btn.btn--primario', { type: 'button', onclick: () => abrirInforme(x, ctx) }, icono('editar', { tam: 15 }), t.informe ? (t.informe.biopsias && !t.informe.histoCargada ? 'Cargar anatomía patológica' : 'Ver o corregir informe') : 'Informe y próximo control'));
+  if (['admitido', 'realizado'].includes(t.estado)) acc.push(h('button.btn.btn--primario', { type: 'button', onclick: () => abrirEstudioDesdeTurno(ctx, x) }, icono('editar', { tam: 15 }), t.informe ? 'Hallazgos y próximo control' : 'Cargar hallazgos y próximo control'));
   acc.push(h('button.btn.btn--suave', { type: 'button', onclick: () => reenviar(x, ctx, t.reprogramaciones ? 'reprogramado' : 'turno') }, icono('campana', { tam: 15 }), 'Reenviar correo'));
   if (ctx.indice?.[x.pac]) acc.push(h('button.btn.btn--suave', { type: 'button', onclick: () => ctx.abrirFicha(x.pac) }, icono('usuario', { tam: 15 }), 'Ficha'));
   return h('article.turno-med', { style: { '--c1': e.c1, '--c2': e.c2 } },

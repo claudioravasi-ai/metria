@@ -266,6 +266,26 @@ export async function construirSemilla(ahora) {
   arbol.estadoTurno = { 'MTR-HIST-4BX2': { t: 'demoVieja01', estado: 'realizado', tipo: 'veda', fecha: fVieja, hora: '0830', reprogramaciones: 0, actualizado: t - 1270 * MS_DIA },
     'MTR-DEMA-2X7K': { t: tid, estado: 'confirmado', tipo: 'doble', fecha: dias[0], hora: '0900', reprogramaciones: 0, actualizado: t - MS_DIA } };
 
+  // Seguimiento a 10 años: Laura con su Barrett (definitivo) y Roberto con una VCC que espera anatomía patológica
+  const C = await import('../engine/calendario.js');
+  const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const sembrarSeg = (pac, eid, estudio, nac, turno = null) => {
+    const ev = C.evaluarEstudio(estudio, { nac });
+    estudio.estado = ev.pendienteAP ? 'esperando-ap' : estudio.histologia?.cargada ? 'definitivo' : 'sin-biopsias';
+    const controles = Object.fromEntries(C.controlesDeEstudio(eid, estudio, ev, { nac }).map((k) => [id(), { ...k, creado: t - MS_DIA }]));
+    arbol.seguimiento ||= {};
+    arbol.seguimiento[pac] = { antecedentes: {}, estudios: { [eid]: { ...estudio, turno, creado: t - MS_DIA, actualizado: t - MS_DIA, por: 'demo-medico' } }, controles,
+      historial: { [id()]: { cuando: t - MS_DIA, por: 'demo-medico', estudio: eid, que: ev.pendienteAP ? 'Estudio cargado: fecha provisoria' : 'Anatomía patológica cargada: fecha definitiva' } } };
+  };
+  sembrarSeg('demo-pac-1', 'segDemo01', { tipo: 'veda', fecha: fVieja, calidad: { preparacion: 'adecuada' }, texto: 'Barrett C2M4 sin displasia en las biopsias.',
+    hallazgos: { hz1: { organo: 'esofago', tipo: 'barrett', pragaC: 2, pragaM: 4, tecnica: 'biopsia', frasco: '1', presuntivo: 'barrett-sin', cantidad: 1 } },
+    histologia: { cargada: true, laboratorio: 'Laboratorio de ejemplo', protocolo: 'B-1234', fechaInforme: iso(t - 1260 * MS_DIA), frascos: { 1: { dx: 'barrett-sin', olga: 0 } } } }, '1980-04-12', 'demoVieja01');
+  sembrarSeg('demo-pac-2', 'segDemo02', { tipo: 'vcc', fecha: iso(t - 20 * MS_DIA), calidad: { preparacion: 'adecuada', boston: 8 }, indicacion: 'Rastreo', texto: 'Dos pólipos resecados con asa fría.',
+    hallazgos: {
+      hz1: { organo: 'colon', segmento: 'Sigma', tipo: 'polipo', cantidad: 1, tamano: 8, paris: '0-Is', tecnica: 'asa-fria', frasco: '1', presuntivo: 'adenoma-bajo' },
+      hz2: { organo: 'colon', segmento: 'Ascendente', tipo: 'polipo', cantidad: 1, tamano: 6, paris: '0-IIa', tecnica: 'asa-fria', frasco: '2', presuntivo: 'adenoma-bajo' },
+    } }, '1966-09-03');
+
   // Lista de espera de ejemplo (con su copia anónima)
   arbol.esperaEndo = { 'demo-pac-3': { tipo: 'vcc', antesDe: null, turno: null, creado: t - 3 * MS_DIA, anon: 'anonDemo0001' } };
   arbol.esperaAnon = { anonDemo0001: { tipo: 'vcc', creado: t - 3 * MS_DIA } };

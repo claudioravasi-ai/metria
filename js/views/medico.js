@@ -13,6 +13,9 @@ import { edad as calcEdad } from '../engine/anthro.js';
 import * as GL from '../engine/glp1.js';
 import { backend, purgarVencidos, purgarRetencion, verificarIdentidad, guardarNota, editarPacienteMedico, borrarPaciente } from '../data/servicio.js';
 import { vistaEndoMedico } from './endoscopia.js';
+import { vistaSeguimientoMedico } from './seguimiento.js';
+import * as DE from '../data/endoscopia.js';
+import { bandeja as bandejaSeg } from '../engine/calendario.js';
 import { prioridadPaciente, NIVELES } from '../engine/prioridad.js';
 import { CATEGORIAS as RIESGO_ENDO } from '../engine/vigilancia.js';
 import { campo, segmentado } from '../ui/campos.js';
@@ -38,7 +41,7 @@ const PESTANAS = [
 
 export function appMedico(perfil, { onSalir }) {
   const B = backend();
-  const S = { indice: {}, solicitudes: {}, medicos: {}, estados: {}, ficha: null, filtro: 'prioridad', busqueda: '', endo: { config: null, agenda: {}, ocupacion: {}, turnos: {}, esperas: {}, envios: {} } };
+  const S = { indice: {}, solicitudes: {}, medicos: {}, estados: {}, ficha: null, filtro: 'prioridad', busqueda: '', seguimiento: {}, endo: { config: null, agenda: {}, ocupacion: {}, turnos: {}, esperas: {}, envios: {} } };
   const bajas = [];
   let bajasFicha = [];
   let form = null, programado = false;
@@ -46,13 +49,14 @@ export function appMedico(perfil, { onSalir }) {
   const items = () => [
     { id: 'panel' }, { id: 'pacientes', badge: null },
     { id: 'endoscopia', badge: (Object.values(S.endo.turnos).flatMap((l) => Object.values(l || {})).filter((t) => t.estado === 'suspendido').length + Object.values(S.endo.envios || {}).filter((e) => e.estado === 'pendiente').length) || null },
+    { id: 'seguimiento', badge: (() => { const b = bandejaSeg(S.seguimiento, hoyISO(B.ahora())); return b.ap.filter((x) => x.vencido).length + b.vencidos.length + b.inmediatos.length || null; })() },
     ...(perfil.titular ? [{ id: 'medicos', badge: Object.entries(S.estados).filter(([uid, e]) => e === 'pendiente' && uid !== perfil.uid).length || null }] : []),
     { id: 'privacidad', nombre: 'Mi cuenta' }, { id: 'ayuda' },
   ];
   const ruta = () => {
     const [a, b] = location.hash.slice(1).split('/');
     if (a === 'ficha' && S.ficha) return { sec: 'pacientes', tab: PESTANAS.some(([k]) => k === b) ? b : 'resumen' };
-    return { sec: ['panel', 'pacientes', 'endoscopia', 'medicos', 'privacidad', 'ayuda'].includes(a) ? a : 'panel' };
+    return { sec: ['panel', 'pacientes', 'endoscopia', 'seguimiento', 'medicos', 'privacidad', 'ayuda'].includes(a) ? a : 'panel' };
   };
   const ir = (id) => { if (id !== 'pacientes') cerrarFicha(); if (location.hash.slice(1) === id) render(); else location.hash = id; };
   // Si la persona está escribiendo, el cambio que llega de otro equipo espera a que salga del campo
@@ -77,6 +81,8 @@ export function appMedico(perfil, { onSalir }) {
   bajas.push(B.escuchar('enviosEndo', (v) => { S.endo.envios = v || {}; endoVivo(); }));
   bajas.push(B.escuchar('esperaEndo', (v) => { S.endo.esperas = v || {}; endoVivo(); }));
   bajas.push(B.escuchar('turnosEndo', (v) => { S.endo.turnos = v || {}; endoVivo(); }));
+  // Seguimiento a 10 años: estudios, hallazgos, histología y controles de todos los pacientes (en vivo)
+  bajas.push(B.escuchar('seguimiento', (v) => { S.seguimiento = v || {}; if (['seguimiento', 'endoscopia', 'panel'].includes(ruta().sec)) programar(); }));
   bajas.push(B.escuchar('solicitudes', (v) => { S.solicitudes = v || {}; if (ruta().sec === 'panel') programar(); }));
   if (perfil.titular) {
     bajas.push(B.escuchar('medicos', (v) => { S.medicos = v || {}; programar(); }));
@@ -87,6 +93,14 @@ export function appMedico(perfil, { onSalir }) {
   const purga = setInterval(() => purgarVencidos(perfil), 10 * 60000);
 
   /* ---------- Ficha ---------- */
+  /** Al guardar el estudio de un turno, el turno queda «realizado» con su informe (lo ve el paciente en Endoscopia). */
+  async function alGuardarTurno(pac, turnoId, r) {
+    const t = S.endo.turnos?.[pac]?.[turnoId];
+    if (!t) return;
+    const e = S.seguimiento?.[pac]?.estudios?.[r.id];
+    await DE.guardarInforme(pac, turnoId, t, JSON.parse(JSON.stringify({ ...r.evaluacion.informe, texto: e?.texto || t.informe?.texto || '', resultado: r.evaluacion.resultado })));
+  }
+
   function abrirFicha(uid) {
     cerrarFicha();
     S.ficha = { uid, pac: null, estudios: {}, auditoria: {}, verif: null, notas: {} };
@@ -118,7 +132,8 @@ export function appMedico(perfil, { onSalir }) {
     let contenido;
     if (r.sec === 'pacientes' && S.ficha) contenido = vistaFicha(r.tab);
     else if (r.sec === 'pacientes') contenido = vistaPacientes();
-    else if (r.sec === 'endoscopia') contenido = vistaEndoMedico({ perfil, indice: S.indice, ...S.endo, abrirFicha, render: programar });
+    else if (r.sec === 'endoscopia') contenido = vistaEndoMedico({ perfil, indice: S.indice, ...S.endo, seguimiento: S.seguimiento, alGuardarTurno, abrirFicha, render: programar });
+    else if (r.sec === 'seguimiento') contenido = vistaSeguimientoMedico({ indice: S.indice, seguimiento: S.seguimiento, turnos: S.endo.turnos, alGuardarTurno, abrirFicha, render: programar });
     else if (r.sec === 'medicos' && perfil.titular) contenido = vistaMedicos();
     else if (r.sec === 'privacidad') contenido = vistaCuenta();
     else if (r.sec === 'ayuda') contenido = vistaManual('medico');
@@ -128,7 +143,7 @@ export function appMedico(perfil, { onSalir }) {
     const mismo = document.getElementById('contenido')?.dataset.sec === clave;
     const scroll = window.scrollY;
     montar(document.getElementById('app'), marco({
-      items: items(), principales: ['panel', 'pacientes', 'endoscopia'], actual: r.sec, onIr: ir, onSalir: salir,
+      items: items(), principales: ['panel', 'pacientes', 'seguimiento', 'endoscopia'], actual: r.sec, onIr: ir, onSalir: salir,
       usuario: `${perfil.datos.nombre} ${perfil.datos.apellido}`, rolTexto: `${perfil.datos.matricula.tipo} ${perfil.datos.matricula.numero}${perfil.titular ? ' · Coordinador' : ''}`,
       extraTop: barraDemo(programar), contenido,
     }));

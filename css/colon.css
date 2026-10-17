@@ -1,0 +1,18 @@
+/* Portada · bloque «¿Te corresponde una colonoscopia?» (js/views/colon-probalo.js) */
+.colon-probalo { --c1: #ec4899; --c2: #f97316; margin-top: clamp(18px, 2.5vw, 30px); }
+.colon-probalo .probalo-grid { align-items: start; }
+.colon-probalo .probalo-resultado { position: sticky; top: 84px; }
+.colon-sub { display: grid; gap: 14px; padding: 14px 16px; border-radius: 18px; border: 1px dashed var(--line); background: color-mix(in srgb, var(--c1) 5%, transparent); }
+.colon-sub[hidden], .colon-probalo .control[hidden] { display: none; }
+.colon-sintomas { display: grid; gap: 2px; }
+.colon-sintomas .sw-txt small { color: var(--text-2); }
+.colon-probalo .segmentado { flex-wrap: wrap; }
+.colon-ayuda { margin: -8px 0 0; font-size: 12.5px; color: var(--text-3); }
+.colon-kpi-txt { font-size: 17px; font-weight: 800; line-height: 1.25; }
+.colon-motivos { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; width: 100%; }
+.colon-motivos li { position: relative; padding: 10px 12px 10px 34px; border-radius: 14px; background: var(--glass); border: 1px solid var(--line); font-size: 14px; line-height: 1.45; }
+.colon-motivos li::before { content: ''; position: absolute; left: 13px; top: 16px; width: 9px; height: 9px; border-radius: 50%; background: linear-gradient(135deg, var(--c1), var(--c2)); }
+.colon-aviso { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 12.5px; color: var(--text-3); line-height: 1.45; }
+.colon-aviso .ico { flex: none; margin-top: 2px; }
+@media (max-width: 860px) { .colon-probalo .probalo-resultado { position: static; } }
+.colon-probalo .medidor-valor { font-size: 34px; }
