@@ -432,22 +432,31 @@ function pasoPre(ctx, ir, cfg) {
     pre[r.id] ||= {};
     const x = pre[r.id];
     const detalle = h('div.req-detalle');
+    // Solo el estado se repinta mientras se escribe: el campo de fecha NO se vuelve a crear
+    // (antes se recreaba con cada tecla, el año quedaba en «0002» y la pantalla se rompía).
     const pintar = () => {
       const est = E.evaluarPrequirurgico(pre, B().ahora(), cfg.validez).items.find((i) => i.id === r.id);
       estado.replaceChildren(chip(est.texto, { ok: 'ok', falta: 'peligro', vencido: 'peligro', 'no-apto': 'peligro', incompleto: 'aviso', 'sin-responder': 'neutro' }[est.estado], est.estado === 'ok' ? 'okCirculo' : 'reloj'));
       caja.classList.toggle('req--ok', est.estado === 'ok');
       caja.classList.toggle('req--falta', ['falta', 'vencido', 'no-apto'].includes(est.estado));
+    };
+    const alCambiar = () => { pintar(); pintarResumen(); };
+    // Fecha completa y razonable (año de 4 cifras desde 1990); mientras se escribe, queda sin fecha
+    const fechaValida = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && +v.slice(0, 4) >= 1990;
+    const armarDetalle = () => {
+      const { dias } = E.evaluarPrequirurgico(pre, B().ahora(), cfg.validez).items.find((i) => i.id === r.id);
       detalle.replaceChildren(...(x.tiene ? [
-        campo('¿Cuándo te lo hiciste?', { type: 'date', value: x.fecha || '', max: hoyISO(B().ahora()), oninput: (e) => { x.fecha = e.target.value; pintar(); pintarResumen(); } }, { ayuda: `Vale ${est.dias} días.` }),
-        r.id === 'ecg' ? h('label.check', h('input', { type: 'checkbox', checked: !!x.informe, onchange: (e) => { x.informe = e.target.checked; pintar(); pintarResumen(); } }), h('span', 'Tiene lectura e informe de un cardiólogo')) : null,
-        r.id === 'anestesia' ? h('label.check', h('input', { type: 'checkbox', checked: x.apto !== false, onchange: (e) => { x.apto = e.target.checked; pintar(); pintarResumen(); } }), h('span', 'El anestesiólogo me dio el apto')) : null,
-      ] : []));
+        campo('¿Cuándo te lo hiciste?', { type: 'date', value: x.fecha || '', min: '1990-01-01', max: hoyISO(B().ahora()), oninput: (e) => { x.fecha = fechaValida(e.target.value) ? e.target.value : ''; alCambiar(); } }, { ayuda: `Vale ${dias} días.` }),
+        r.id === 'ecg' ? h('label.check', h('input', { type: 'checkbox', checked: !!x.informe, onchange: (e) => { x.informe = e.target.checked; alCambiar(); } }), h('span', 'Tiene lectura e informe de un cardiólogo')) : null,
+        r.id === 'anestesia' ? h('label.check', h('input', { type: 'checkbox', checked: x.apto !== false, onchange: (e) => { x.apto = e.target.checked; alCambiar(); } }), h('span', 'El anestesiólogo me dio el apto')) : null,
+      ].filter(Boolean) : []));
     };
     const estado = h('div.req-estado');
     const caja = h('article.req', { style: { '--c1': r.c1, '--c2': r.c2 } },
       h('header.req-cab', h('span.req-ico', icono(r.icono, { tam: 22 })), h('div', h('strong', r.nombre), h('small', r.detalle))),
-      segmentado([{ valor: 'si', texto: 'Lo tengo', icono: 'ok' }, { valor: 'no', texto: 'No lo tengo', icono: 'x' }], x.tiene === true ? 'si' : x.tiene === false ? 'no' : null, (v) => { x.tiene = v === 'si'; pintar(); pintarResumen(); }, { etiqueta: r.nombre }),
+      segmentado([{ valor: 'si', texto: 'Lo tengo', icono: 'ok' }, { valor: 'no', texto: 'No lo tengo', icono: 'x' }], x.tiene === true ? 'si' : x.tiene === false ? 'no' : null, (v) => { x.tiene = v === 'si'; armarDetalle(); alCambiar(); }, { etiqueta: r.nombre }),
       detalle, estado);
+    armarDetalle();
     pintar();
     return caja;
   };

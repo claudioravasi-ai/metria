@@ -54,7 +54,7 @@ export function probaloColon() {
   queueMicrotask(recalcular);
 
   return h('section.probalo.colon-probalo', { 'data-revelar': '' },
-    h('div.seccion-titulo', h('span.portada-etiqueta', icono('endoscopio', { tam: 14 }), 'Colon y recto'), h('h2', 'Mové los controles y mirá si te corresponde una colonoscopia o estás dentro del screening poblacional'), h('p', 'Según las últimas guías (USPSTF, USMSTF, ACG, ESGE, AGA). Sin registrarte y sin guardar nada.')),
+    h('div.seccion-titulo', h('span.portada-etiqueta', icono('endoscopio', { tam: 14 }), 'Colon y recto'), h('h2', 'Mové los controles y mirá si te corresponde una colonoscopia'), h('p', 'Según las últimas guías (USPSTF, USMSTF, ACG, ESGE, AGA). Sin registrarte y sin guardar nada.')),
     h('div.probalo-grid',
       h('div.probalo-controles',
         seg('Sexo biológico', 'sexo', [['F', 'Mujer'], ['M', 'Varón']], null, false),
@@ -76,5 +76,5 @@ export function probaloColon() {
           h('div.kpi-vidrio', { style: { '--c1': '#0ea5e9', '--c2': '#6366f1' } }, h('small', 'Qué estudio'), estudio),
           h('div.kpi-vidrio', { style: { '--c1': '#ec4899', '--c2': '#f97316' } }, h('small', 'Cuándo'), cuando)),
         motivos,
-        h('p.colon-aviso', icono('info', { tam: 15 }), 'Es una orientación, no un diagnóstico. Si tenés síntomas, consultá aunque el resultado diga otra cosa. No contempla enfermedad inflamatoria intestinal ni síndromes hereditarios conocidos (Lynch, poliposis): en esos casos el control lo indica tu médico.'))));
+        h('p.colon-aviso', icono('info', { tam: 15 }), 'Es una orientación aproximada, no un diagnóstico: la decisión la toma tu médico en la consulta presencial, según tus antecedentes, medicación y hábitos. Si tenés síntomas, consultá aunque el resultado diga otra cosa. No contempla enfermedad inflamatoria intestinal ni síndromes hereditarios conocidos (Lynch, poliposis): en esos casos el control lo indica tu médico.'))));
 }

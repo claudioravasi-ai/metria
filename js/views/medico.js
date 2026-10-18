@@ -33,10 +33,11 @@ import { cambioClave, cambioCorreo, POLITICA, TERMINOS, verTexto } from './legal
 const CONFIG_APP = 'Metria';
 const RIESGO = { 'muy-alto': ['Muy alto', 'peligro'], alto: ['Alto', 'peligro'], intermedio: ['Intermedio', 'aviso'], limite: ['Limítrofe', 'aviso'], bajo: ['Bajo', 'ok'] };
 const GLP = { indicado: ['Candidato', 'ok'], precaucion: ['Candidato c/ precaución', 'aviso'], 'no-indicado': ['No indicado', 'neutro'], contraindicado: ['Contraindicado', 'peligro'] };
+// Lo digestivo primero (datos, estudios, notas); lo metabólico y cardiovascular después, como complemento
 const PESTANAS = [
-  ['resumen', 'Resumen', 'grafico', 'panel'], ['datos', 'Datos', 'datos', 'datos'], ['metabolismo', 'Metabolismo', 'llama', 'metabolismo'], ['cuerpo', 'Cuerpo', 'cuerpo', 'cuerpo'],
-  ['corazon', 'Corazón', 'corazon', 'corazon'], ['laboratorio', 'Laboratorio', 'matraz', 'laboratorio'], ['tratamiento', 'Tratamiento', 'jeringa', 'tratamiento'], ['plan', 'Plan integral', 'objetivo', 'plan'],
-  ['estudios', 'Estudios', 'carpeta', 'estudios'], ['notas', 'Notas', 'editar', 'ayuda'], ['accesos', 'Accesos', 'ojo', 'privacidad'],
+  ['resumen', 'Resumen', 'grafico', 'panel'], ['datos', 'Datos', 'datos', 'datos'], ['estudios', 'Estudios', 'carpeta', 'estudios'], ['notas', 'Notas', 'editar', 'ayuda'],
+  ['metabolismo', 'Metabolismo', 'llama', 'metabolismo'], ['cuerpo', 'Cuerpo', 'cuerpo', 'cuerpo'], ['corazon', 'Corazón', 'corazon', 'corazon'], ['laboratorio', 'Laboratorio', 'matraz', 'laboratorio'],
+  ['tratamiento', 'Tratamiento', 'jeringa', 'tratamiento'], ['plan', 'Plan integral', 'objetivo', 'plan'], ['accesos', 'Accesos', 'ojo', 'privacidad'],
 ];
 
 export function appMedico(perfil, { onSalir }) {

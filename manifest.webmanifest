@@ -1,7 +1,7 @@
 {
   "name": "Metria · Salud digestiva",
   "short_name": "Metria",
-  "description": "Turnos de endoscopia con ticket QR, estudios médicos, metabolismo, riesgo cardiovascular y tratamiento.",
+  "description": "Turnos de endoscopia con ticket QR, seguimiento de controles de VEDA y colonoscopia, y estudios médicos. Como complemento: metabolismo y riesgo cardiovascular.",
   "lang": "es-AR",
   "start_url": "./",
   "scope": "./",

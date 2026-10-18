@@ -5,12 +5,13 @@
 
    Guías en las que se apoya:
    - USPSTF 2021 / ACS 2018 / USMSTF 2021 / ACG 2021: riesgo promedio
-     de 45 a 75 años (colonoscopia cada 10 años o test inmunoquímico
+     de 45 a 75 años (colonoscopia cada 10 años —este consultorio usa 5,
+     ver INTERVALO_SCREENING— o test inmunoquímico
      de sangre oculta —FIT— anual). 76–85: decisión individual. >85: no.
    - USMSTF 2017 (antecedentes familiares) y ACG 2021: un familiar de
      1.er grado <60 años o dos o más de 1.er grado a cualquier edad →
      colonoscopia desde los 40 o 10 años antes del caso más joven,
-     cada 5 años. Un familiar de 1.er grado ≥60 → desde los 40, cada 10.
+     cada 5 años. Un familiar de 1.er grado ≥60 → desde los 40, cada 10 (acá, 5).
      Solo 2.º o 3.er grado → riesgo promedio.
    - USMSTF 2017 / ESGE 2020 (calidad del screening): FIT positivo →
      colonoscopia diagnóstica sin demora (idealmente dentro de 60 días).
@@ -30,6 +31,10 @@ export const CATS_COLON = [
 const cat = (id) => CATS_COLON.find((c) => c.id === id);
 /** Ubica el valor dentro de la banda (f de 0 a 1). */
 const enBanda = (id, f) => { const c = cat(id); return c.desde + (c.hasta - c.desde) * Math.min(0.92, Math.max(0.08, f)); };
+/** Colonoscopia de rastreo con riesgo promedio: criterio del consultorio (CLAU, 17-10-2026) = cada 5 años.
+ *  USPSTF, USMSTF y ESGE indican cada 10 años si la colonoscopia es normal. */
+export const INTERVALO_SCREENING = 5;
+const NOTA_INTERVALO = 'El intervalo de 5 años es el criterio de este consultorio; las guías internacionales aceptan hasta 10 años si la colonoscopia es normal.';
 const anios = (n) => `${n} ${n === 1 ? 'año' : 'años'}`;
 
 /**
@@ -46,7 +51,7 @@ export function evaluarColon(p) {
   const sintomas = [p.sangreMoco && 'sangre o moco en la materia fecal', p.cambioHabito && 'cambio en el hábito evacuatorio', p.perdidaPeso && 'pérdida de peso no buscada'].filter(Boolean);
 
   // Riesgo familiar
-  let inicio = 45, intervalo = 10, familiarAlto = false, fam = 'promedio';
+  let inicio = 45, intervalo = INTERVALO_SCREENING, familiarAlto = false, fam = 'promedio';
   if (p.familiar === '1') {
     const alto = p.familiares1 >= 2 || (Number.isFinite(p.edadFamiliar) && p.edadFamiliar < 60);
     const diezAntes = Number.isFinite(p.edadFamiliar) ? p.edadFamiliar - 10 : 40;
@@ -81,7 +86,7 @@ export function evaluarColon(p) {
 
   // 3) Colonoscopia previa: ¿está al día?
   if (p.previa) {
-    const prox = p.intervaloIndicado || (familiarAlto ? 5 : 10);
+    const prox = p.intervaloIndicado || (familiarAlto ? 5 : INTERVALO_SCREENING);
     const resta = prox - p.aniosPrevia;
     const quien = p.intervaloIndicado ? `tu médico te indicó repetirla a los ${anios(p.intervaloIndicado)}` : `sin indicación especial se repite a los ${anios(prox)}${familiarAlto ? ' por tu antecedente familiar' : ' si fue normal'}`;
     if (resta > 0) {
@@ -123,13 +128,14 @@ export function evaluarColon(p) {
     return armar('no', enBanda('no', 0.15 + edad / 100), `Empezás a los 45 años`, 'Ninguno por ahora', motivos, fam);
   }
   if (p.fit === 'neg') {
-    motivos.push('Tu test de sangre oculta del último año fue negativo: estás dentro del screening. Repetilo cada año, o pasá a colonoscopia cada 10 años.');
+    motivos.push('Tu test de sangre oculta del último año fue negativo: estás dentro del screening. Repetilo cada año, o pasá a colonoscopia cada 5 años.');
     return armar('screening', enBanda('screening', 0.2), 'Al día: repetí el FIT al año', 'FIT anual', motivos, fam);
   }
   motivos.push('Tenés entre 45 y 75 años, sin síntomas y con riesgo promedio: estás dentro del screening poblacional.');
   motivos.push(p.fit === 'negViejo'
-    ? 'Tu último test de sangre oculta tiene más de un año: hay que repetirlo, o hacer una colonoscopia (cada 10 años si es normal).'
-    : 'Las opciones son colonoscopia cada 10 años o test de sangre oculta inmunoquímico (FIT) cada año; si da positivo, colonoscopia.');
+    ? 'Tu último test de sangre oculta tiene más de un año: hay que repetirlo, o hacer una colonoscopia (cada 5 años si es normal).'
+    : 'Las opciones son colonoscopia cada 5 años o test de sangre oculta inmunoquímico (FIT) cada año; si da positivo, colonoscopia.');
+  motivos.push(NOTA_INTERVALO);
   if (p.sexo === 'F') motivos.push('Las recomendaciones son iguales para mujeres y varones.');
   return armar('screening', enBanda('screening', 0.4 + (edad - 45) / 100), 'Te corresponde este año', 'Colonoscopia o FIT anual', motivos, fam);
 }

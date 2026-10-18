@@ -20,9 +20,8 @@ import { campo, segmentado, fuerzaClave, deslizador } from '../ui/campos.js';
 import * as G from '../ui/graficos.js';
 import { inclinar, revelar, contar, ecg } from '../ui/efectos.js';
 import * as A from '../engine/anthro.js';
-import * as R from '../engine/risk.js';
 import { logo, alternarTema, barraDemo } from './shell.js';
-import { POLITICA, TERMINOS, verTexto } from './legal.js';
+import { POLITICA, TERMINOS, verTexto, pieLegal } from './legal.js';
 import { DEMO } from '../data/semilla.js';
 import { botonInstalar } from '../core/instalar.js';
 import { probaloColon } from './colon-probalo.js';
@@ -71,10 +70,7 @@ function pantalla(...contenido) {
         h('button.btn-link.solo-ancho', { type: 'button', onclick: () => ingresoProfesional() }, 'Profesionales'),
         h('button.btn-icono', { type: 'button', 'aria-label': 'Cambiar tema', onclick: alternarTema }, icono('luna')))),
     h('main.acceso-main', ...contenido),
-    h('footer.acceso-pie',
-      h('button.btn-link', { type: 'button', onclick: () => verTexto('Política de privacidad', POLITICA()) }, 'Privacidad'),
-      h('span', '·'), h('button.btn-link', { type: 'button', onclick: () => verTexto('Términos de uso', TERMINOS()) }, 'Términos'),
-      h('span', '·'), h('span', 'Emergencias: 107'))));
+    h('footer.acceso-pie', pieLegal())));
   revelar(vista);
   window.scrollTo(0, 0);
   return vista;
@@ -82,38 +78,38 @@ function pantalla(...contenido) {
 
 /* ======================= PORTADA ======================= */
 
-/** Vitrina: un "teléfono" de vidrio que muestra la app funcionando con perfiles de ejemplo. */
+/** Vitrina: un "teléfono" de vidrio que muestra la app funcionando con pacientes de ejemplo
+ *  (turno de endoscopia, prequirúrgico y próximo control en la línea de 10 años). */
 function vitrina() {
   const perfiles = [
-    { nombre: 'Laura, 46', peso: 89, talla: 164, edad: 46, sexo: 'F', pas: 134, ct: 218, hdl: 44, tratHta: true },
-    { nombre: 'Roberto, 60', peso: 113, talla: 176, edad: 60, sexo: 'M', pas: 142, ct: 182, hdl: 38, tratHta: true, dm: true },
-    { nombre: 'Sofía, 29', peso: 63, talla: 166, edad: 29, sexo: 'F', pas: 112, ct: 176, hdl: 62 },
+    { nombre: 'Laura, 46', estudio: 'VEDA', fecha: 'Lun 19 oct', hora: '08:00', codigo: 'MTR-7K2P-Q4XD', control: 'VEDA en 3 años', motivo: 'Barrett sin displasia (ESGE 2023)', anio: 3 },
+    { nombre: 'Roberto, 60', estudio: 'VEDA + VCC', fecha: 'Mié 21 oct', hora: '09:30', codigo: 'MTR-3HB8-ZT6M', control: 'Colonoscopia en 3 años', motivo: 'Adenoma ≥ 10 mm (ESGE 2020)', anio: 3 },
+    { nombre: 'Sofía, 52', estudio: 'VCC', fecha: 'Vie 23 oct', hora: '10:00', codigo: 'MTR-9WQ3-LC2F', control: 'Colonoscopia en 5 años', motivo: 'Rastreo: colonoscopia normal', anio: 5 },
   ];
-  const imc = G.medidor({ min: 14, max: 45, unidad: 'IMC', formato: (v) => fmt(v, 1), bandas: A.CATS_IMC.map((c) => ({ desde: Math.max(14, c.min), hasta: Math.min(45, c.max), color: c.color, nombre: c.nombre })), marcas: [18.5, 25, 30, 35, 40] });
-  const ring = G.anillo({ max: 3600, etiqueta: 'Gasto diario', unidad: 'kcal/día' });
-  const riesgo = G.escala({ segmentos: [
-    { desde: 0, hasta: 5, color: '#22c55e', nombre: 'Bajo' }, { desde: 5, hasta: 7.5, color: '#eab308', nombre: 'Limítrofe' },
-    { desde: 7.5, hasta: 20, color: '#f97316', nombre: 'Intermedio' }, { desde: 20, hasta: 50, color: '#ef4444', nombre: 'Alto' }] });
   const nombre = h('strong', '');
+  const estudio = h('strong'), cuando = h('span'), codigo = h('span.vit-codigo');
+  const control = h('strong'), motivo = h('small');
+  const linea = h('div.vit-linea', ...Array.from({ length: 11 }, () => h('i')));
   const puntos = h('div.vitrina-puntos', ...perfiles.map(() => h('i')));
   let n = 0, timer;
   const mostrar = (i) => {
     n = i;
     const p = perfiles[i];
-    const e = A.energia({ ...p, actividad: 'ligera' });
-    imc.set(A.imc(p.peso, p.talla), A.categoriaImc(A.imc(p.peso, p.talla)).nombre);
-    ring.set(e.get, e.tmb); ring.etiqueta(`Basal ${fmt0(e.tmb)} kcal`);
-    const r = R.prevent({ ...p, estatina: false, tabaco: false, tfg: 90, imc: A.imc(p.peso, p.talla) });
-    riesgo.set(r.cvd10);
     nombre.textContent = p.nombre;
+    estudio.textContent = p.estudio; cuando.textContent = `${p.fecha} · ${p.hora} h`; codigo.textContent = p.codigo;
+    control.textContent = p.control; motivo.textContent = p.motivo;
+    linea.querySelectorAll('i').forEach((el, k) => el.classList.toggle('on', k === 0 || k === p.anio));
     puntos.querySelectorAll('i').forEach((el, k) => el.classList.toggle('activo', k === i));
   };
   const ciclo = () => { clearInterval(timer); timer = setInterval(() => { if (!document.body.contains(caja)) { clearInterval(timer); return; } mostrar((n + 1) % perfiles.length); }, 3600); };
   puntos.querySelectorAll('i').forEach((el, k) => el.addEventListener('click', () => { mostrar(k); ciclo(); }));
   const caja = h('div.vitrina', { 'aria-label': 'Demostración animada de la app con pacientes ficticios' },
     h('div.vitrina-cab', h('span.vivo-punto'), h('span', 'En vivo · ejemplo: '), nombre),
-    h('div.vitrina-bloque.vitrina-imc', imc.el),
-    h('div.vitrina-fila', h('div.vitrina-bloque.vitrina-ring', ring.el), h('div.vitrina-bloque.vitrina-riesgo', h('small', 'Riesgo cardiovascular a 10 años (PREVENT)'), riesgo.el)),
+    h('div.vitrina-bloque.vit-turno', h('small', 'TURNO DE ENDOSCOPIA · CONFIRMADO'), h('div.vit-turno-fila', estudio, cuando), codigo),
+    h('div.vitrina-bloque.vit-pre', h('small', 'Prequirúrgico'),
+      h('ul', ...['Análisis de sangre', 'Electrocardiograma con informe', 'Valoración anestesiológica'].map((t) => h('li', icono('okCirculo', { tam: 16 }), t)))),
+    h('div.vitrina-bloque.vit-ctl', h('small', 'Próximo control · calendario a 10 años'), control, motivo, linea,
+      h('div.vit-anios', h('span', 'Hoy'), h('span', '5 años'), h('span', '10 años'))),
     puntos);
   queueMicrotask(() => { mostrar(0); ciclo(); });
   return inclinar(h('div.vitrina-marco', h('div.vitrina-brillo'), caja), 6);
@@ -136,8 +132,8 @@ function probalo() {
   };
   const sl = (etq, k, min, max, paso, u, ic) => deslizador({ etiqueta: etq, min, max, paso, valor: st[k], unidad: u, icono: ic, onInput: (v) => { st[k] = v; recalcular(); } }).el;
   queueMicrotask(recalcular);
-  return h('section.probalo', { 'data-revelar': '' },
-    h('div.seccion-titulo', h('span.portada-etiqueta', icono('rayo', { tam: 14 }), 'Probalo ahora'), h('h2', 'Mové los controles y mirá tu cuerpo en números'), h('p', 'Sin registrarte y sin guardar nada: es el mismo motor que usa la app.')),
+  return h('section.probalo.probalo--extra', { 'data-revelar': '' },
+    h('div.seccion-titulo', h('span.portada-etiqueta', icono('llama', { tam: 14 }), 'Complemento'), h('h2', 'Además: mové los controles y mirá tu cuerpo en números'), h('p', 'Metabolismo y peso saludable, sin registrarte y sin guardar nada.')),
     h('div.probalo-grid',
       h('div.probalo-controles',
         h('div.control', h('div.control-cab', h('label', 'Sexo biológico')), segmentado([{ valor: 'F', texto: 'Mujer' }, { valor: 'M', texto: 'Varón' }], 'F', (v) => { st.sexo = v; recalcular(); })),
@@ -164,13 +160,16 @@ export function portada() {
   }, 2800);
 
   const funciones = [
-    ['llama', 'Metabolismo', 'Gasto basal y total con tres fórmulas, en vivo mientras movés los controles.', '#f97316', '#facc15'],
-    ['cuerpo', 'Cuerpo', 'IMC con aguja, silueta que cambia, grasa estimada y tu evolución.', '#14b8a6', '#22c55e'],
-    ['corazon', 'Corazón', 'Riesgo a 10 y 30 años con PREVENT (AHA) y un simulador «¿y si…?».', '#f43f5e', '#fb923c'],
-    ['matraz', 'Laboratorio', 'Cada valor en colores, con filtrado renal, HOMA, FIB-4 y más.', '#8b5cf6', '#d946ef'],
-    ['jeringa', 'Tratamiento', 'Plan de tu médico con calendario de dosis y proyección de peso.', '#2563eb', '#06b6d4'],
-    ['carpeta', 'Estudios', 'Tus estudios protegidos: los ves, los descargás y se borran a los 3 días.', '#10b981', '#84cc16'],
     ['endoscopio', 'Endoscopia', 'Turno de endoscopia alta, baja o doble en 4 pasos, con ticket QR, preparación y consentimiento.', '#ec4899', '#f97316'],
+    ['calendario', 'Seguimiento', 'Tus controles de VEDA y colonoscopia en un calendario a 10 años, según las guías y tu anatomía patológica.', '#0d9488', '#6366f1'],
+    ['carpeta', 'Estudios', 'Tus estudios protegidos: los ves, los descargás y se borran a los 3 días.', '#10b981', '#84cc16'],
+  ];
+  const complementos = [
+    ['llama', 'Metabolismo', 'Gasto basal y total con tres fórmulas, en vivo.', '#f97316', '#facc15'],
+    ['cuerpo', 'Cuerpo', 'IMC con aguja, grasa estimada y tu evolución.', '#14b8a6', '#22c55e'],
+    ['corazon', 'Corazón', 'Riesgo a 10 y 30 años con PREVENT (AHA).', '#f43f5e', '#fb923c'],
+    ['matraz', 'Laboratorio', 'Cada valor en colores, con filtrado renal, HOMA y FIB-4.', '#8b5cf6', '#d946ef'],
+    ['jeringa', 'Tratamiento', 'Plan de tu médico con calendario de dosis.', '#2563eb', '#06b6d4'],
   ];
   const tarjeta = ([ic, t, d, c1, c2]) => inclinar(h('article.funcion', { 'data-revelar': '', style: { '--c1': c1, '--c2': c2 } },
     h('span.funcion-gema', icono(ic, { tam: 26 })), h('h3', t), h('p', d), h('span.funcion-brillo')), 8);
@@ -188,28 +187,30 @@ export function portada() {
       h('div.hero-izq',
         h('div.portada-logo', logo('grande')),
         h('span.portada-etiqueta', icono('chispa', { tam: 14 }), 'Motor clínico en tiempo real'),
-        h('h1', 'Tu salud cardiometabólica, ', h('br.solo-ancho'), rotador),
-        h('p.hero-bajada', 'Metabolismo, cuerpo, corazón, laboratorio, tratamiento y estudios médicos. Todo calculado al instante con las fórmulas que usan los médicos.'),
+        h('h1', 'Tu salud digestiva, ', h('br.solo-ancho'), rotador),
+        h('p.hero-bajada', 'Turnos de endoscopia, tus controles de VEDA y colonoscopia en un calendario a 10 años y tus estudios médicos. Y como complemento, metabolismo y corazón.'),
         h('div.hero-cta',
           h('button.btn.btn--primario.btn--grande.btn--brillo', { type: 'button', onclick: () => ingresoPaciente() }, icono('usuario', { tam: 18 }), 'Soy paciente'),
           h('button.btn.btn--vidrio.btn--grande', { type: 'button', onclick: () => ingresoProfesional() }, icono('estetoscopio', { tam: 18 }), 'Soy profesional'),
           botonInstalar('btn.btn--vidrio.btn--grande')),
-        h('div.hero-sellos', chip('PREVENT · AHA 2023', 'info', 'corazon'), chip('Ley 25.326', 'ok', 'escudo'), chip('Sin contraseñas para pacientes', 'neutro', 'candado'))),
+        h('div.hero-sellos', chip('Guías ESGE · USMSTF', 'info', 'endoscopio'), chip('Ley 25.326', 'ok', 'escudo'), chip('Sin contraseñas para pacientes', 'neutro', 'candado'))),
       h('div.hero-der', vitrina()),
       ecg({ clase: 'hero-ecg' })),
-    h('section.cifras', datoContado(10, ' s', 'para ver tu riesgo'), datoContado(30, ' años', 'de proyección del riesgo'), datoContado(6, '', 'tratamientos comparados'), datoContado(72, ' h', 'y tus estudios se borran')),
-    probalo(),
+    h('section.cifras', datoContado(4, '', 'pasos para tu turno'), datoContado(10, ' años', 'de calendario de controles'), datoContado(3, '', 'requisitos del prequirúrgico'), datoContado(72, ' h', 'y tus estudios se borran')),
     probaloColon(),
+    probalo(),
     h('section.funciones-sec',
-      h('div.seccion-titulo', { 'data-revelar': '' }, h('span.portada-etiqueta', icono('estrella', { tam: 14 }), 'Todo en un lugar'), h('h2', 'Siete secciones, un color para cada una')),
-      h('div.funciones', ...funciones.map(tarjeta))),
+      h('div.seccion-titulo', { 'data-revelar': '' }, h('span.portada-etiqueta', icono('estrella', { tam: 14 }), 'Todo en un lugar'), h('h2', 'Tu salud digestiva primero')),
+      h('div.funciones', ...funciones.map(tarjeta)),
+      h('p.funciones-sub', { 'data-revelar': '' }, 'Y como complemento, para cuidarte también por fuera de lo digestivo'),
+      h('div.funciones.funciones--extra', ...complementos.map(tarjeta))),
     h('section.puertas-sec',
       h('div.seccion-titulo', { 'data-revelar': '' }, h('h2', '¿Cómo querés entrar?')),
       h('div.puertas',
         puerta('paciente', 'Soy paciente', 'Creá tu cuenta en un minuto, sin contraseña.', 'usuario', '#06b6d4', '#6366f1',
           ['Código al correo + tu PIN', 'Turnos de endoscopia con ticket QR', 'Tus estudios con aviso de privacidad'], () => ingresoPaciente()),
         puerta('medico', 'Soy profesional', 'Ingreso con matrícula, autorizado por el coordinador.', 'estetoscopio', '#f43f5e', '#8b5cf6',
-          ['Ficha completa y motor GLP-1', 'Carga de estudios', 'Solo con autorización del coordinador'], () => ingresoProfesional()))),
+          ['Seguimiento por DNI y calendario a 10 años', 'Turnos, prequirúrgico y carga de estudios', 'Solo con autorización del coordinador'], () => ingresoProfesional()))),
     B.modo === 'demo' ? h('section.demo-accesos', { 'data-revelar': '' },
       h('h3', 'Probar con datos de ejemplo'),
       h('div.botones',
@@ -449,7 +450,7 @@ export function registroPaciente() {
   const consent = [
     ['datos', h('span', 'Acepto la ', h('button.btn-link', { type: 'button', onclick: () => verTexto('Política de privacidad', POLITICA()) }, 'política de privacidad'), ' y presto consentimiento expreso para el tratamiento de mis datos de salud con fines de atención médica (Ley 25.326, arts. 5 y 7).')],
     ['transf', h('span', 'Entiendo que los datos se alojan en servidores de un proveedor (Google Firebase) que pueden estar fuera de la Argentina y consiento esa transferencia (art. 12). Si mi médico lo pide, una copia sin mi nombre ni DNI puede analizarse con IA (Anthropic, EE. UU.).')],
-    ['terminos', h('span', 'Acepto los ', h('button.btn-link', { type: 'button', onclick: () => verTexto('Términos de uso', TERMINOS()) }, 'términos de uso'), ' y entiendo que los cálculos son orientativos y no reemplazan la consulta.')],
+    ['terminos', h('span', 'Acepto los ', h('button.btn-link', { type: 'button', onclick: () => verTexto('Términos de uso', TERMINOS()) }, 'términos de uso'), ' y entiendo que los resultados de la app son orientativos: la decisión final la toma mi médico en la consulta presencial.')],
     ['mayor', h('span', 'Soy mayor de 18 años.')],
   ].map(([k, txt]) => { const i = h('input', { type: 'checkbox', name: k, checked: !!previo.consentimiento }); return { k, i, el: h('label.check.check--legal', i, txt) }; });
   const btn = h('button.btn.btn--primario.btn--grande.btn--bloque.btn--brillo', { type: 'submit' }, icono('flechaDer', { tam: 18 }), 'Enviarme el código');

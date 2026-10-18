@@ -1232,7 +1232,7 @@ input.otp:focus { transform: translateY(-2px); }
 /* Requisitos del prequirúrgico */
 .reqs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 @media (max-width: 960px) { .reqs { grid-template-columns: 1fr; } }
-.req { display: grid; gap: 12px; align-content: start; padding: 18px; border-radius: 22px; background: var(--surface); border: 1.5px solid var(--line); box-shadow: var(--shadow); transition: border-color .3s, background .3s; }
+article.req { display: grid; gap: 12px; align-content: start; padding: 18px; border-radius: 22px; background: var(--surface); border: 1.5px solid var(--line); box-shadow: var(--shadow); transition: border-color .3s, background .3s; }
 .req--ok { border-color: color-mix(in srgb, #22c55e 55%, var(--line)); background: linear-gradient(160deg, color-mix(in srgb, #22c55e 9%, var(--surface)), var(--surface)); }
 .req--falta { border-color: color-mix(in srgb, #ef4444 45%, var(--line)); }
 .req-cab { display: flex; gap: 12px; align-items: center; }
@@ -1624,3 +1624,55 @@ input.otp:focus { transform: translateY(-2px); }
   .seg-anios { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .seg-dni-input { font-size: 18px; }
 }
+
+/* ---------- 1.6.1 · Lo digestivo primero; lo metabólico y cardiovascular como complemento ---------- */
+.nav-grupo { margin: 14px 12px 4px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.hoja-grupo { grid-column: 1 / -1; margin-top: 6px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.bloque-extra { display: grid; gap: 12px; }
+.bloque-extra-cab { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.bloque-extra-cab h2 { margin: 0; font-size: 18px; }
+.bloque-extra-cab p { margin: 0; color: var(--text-2); font-size: 14px; }
+.bento--extra .tile { opacity: .92; }
+.funciones--extra { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.funciones--extra .funcion { padding: 16px; }
+.funciones--extra .funcion h3 { font-size: 16px; }
+.funciones--extra .funcion p { font-size: 13.5px; }
+.funciones-sub { margin: 28px 0 12px; text-align: center; color: var(--text-2); font-size: 15px; font-weight: 700; }
+.probalo--extra { margin-top: clamp(18px, 2.5vw, 30px); }
+.probalo--extra .seccion-titulo h2 { font-size: clamp(20px, 2.4vw, 26px); }
+/* Vitrina endoscópica de la portada */
+.vit-turno { --c1: #ec4899; --c2: #f97316; display: grid; gap: 8px; color: #fff; background: linear-gradient(135deg, var(--c1), var(--c2)); border: 0; }
+.vit-turno small { opacity: .9; font-weight: 700; letter-spacing: .06em; font-size: 11px; }
+.vit-turno-fila { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.vit-turno-fila strong { font-size: 22px; font-family: var(--fn); }
+.vit-turno-fila span { font-size: 13px; font-weight: 700; opacity: .95; }
+.vit-codigo { font-family: ui-monospace, monospace; font-size: 13px; background: rgba(255, 255, 255, .2); border-radius: 10px; padding: 4px 8px; justify-self: start; }
+.vit-pre { display: grid; gap: 6px; }
+.vit-pre small, .vit-ctl small { color: var(--text-2); font-size: 12px; font-weight: 700; }
+.vit-pre ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+.vit-pre li { display: flex; align-items: center; gap: 8px; }
+.vit-pre li .ico { color: #22c55e; }
+.vit-ctl { display: grid; gap: 8px; --c1: #0d9488; }
+.vit-linea { position: relative; display: flex; justify-content: space-between; padding-top: 14px; }
+.vit-linea::before { content: ''; position: absolute; left: 6px; right: 6px; top: 19px; height: 3px; border-radius: 3px; background: var(--line); }
+.vit-linea i { position: relative; width: 13px; height: 13px; border-radius: 50%; background: var(--surface-3); border: 2px solid var(--line-2); }
+.vit-linea i.on { background: linear-gradient(135deg, #0d9488, #6366f1); border-color: transparent; box-shadow: 0 0 0 4px color-mix(in srgb, #0d9488 20%, transparent); }
+.vit-anios { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); font-weight: 650; }
+.vit-ctl strong { font-size: 15px; }
+/* Turnos del médico: en 320 px la tarjeta se salía de la pantalla */
+.turno-med { grid-template-columns: 76px minmax(0, 1fr); }
+.turno-med .chips { flex-wrap: wrap; }
+.turno-med .chip { white-space: normal; max-width: 100%; }
+@media (max-width: 360px) { .turno-med { grid-template-columns: 58px minmax(0, 1fr); padding: 12px; } }
+/* Pie médico-legal (portada y app) */
+.pie-legal { width: 100%; max-width: 980px; margin: 0 auto; display: grid; gap: 6px; text-align: left; color: var(--text-2); font-size: 12.5px; line-height: 1.5; }
+.pie-legal p { margin: 0; }
+.pie-legal-corto { display: flex; gap: 8px; align-items: flex-start; color: var(--text); font-size: 13.5px; }
+.pie-legal-corto .ico { flex: none; margin-top: 2px; color: var(--c1, #6366f1); }
+.pie-legal-links { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.app-pie { width: 100%; max-width: 1240px; margin: 0 auto; padding: 18px 32px 28px; border-top: 1px solid var(--line); }
+@media (max-width: 767px) {
+  .contenido { padding-bottom: 20px; }
+  .app-pie { padding: 16px 16px calc(var(--inferior) + 28px + env(safe-area-inset-bottom)); }
+}
+@media print { .app-pie { display: none; } }

@@ -24,8 +24,10 @@ import { vistaEndoPaciente, alEntrarEndo } from './endoscopia.js';
 import { tarjetaControlesPaciente } from './seguimiento.js';
 import { turnoActivo, estadoVisible, ESTADOS, ESTUDIOS, fechaCorta, hora as horaTurno, dentroDe48h, faltaTexto } from '../engine/endoscopia.js';
 
-const ITEMS = ['inicio', 'endoscopia', 'datos', 'plan', 'metabolismo', 'cuerpo', 'corazon', 'laboratorio', 'tratamiento', 'estudios', 'privacidad', 'ayuda'];
-const PRINCIPALES = ['inicio', 'endoscopia', 'estudios', 'cuerpo'];
+// Lo digestivo y endoscópico primero; lo metabólico y cardiovascular, como complemento
+const ITEMS = ['inicio', 'endoscopia', 'estudios', 'datos', 'plan', 'metabolismo', 'cuerpo', 'corazon', 'laboratorio', 'tratamiento', 'privacidad', 'ayuda'];
+const COMPLEMENTOS = ['plan', 'metabolismo', 'cuerpo', 'corazon', 'laboratorio', 'tratamiento'];
+const PRINCIPALES = ['inicio', 'endoscopia', 'estudios', 'datos'];
 
 export function appPaciente(perfil, { onSalir }) {
   const B = backend();
@@ -111,7 +113,7 @@ export function appPaciente(perfil, { onSalir }) {
     const scroll = window.scrollY;
     const mismo = document.getElementById('contenido')?.dataset.sec === id;
     montar(document.getElementById('app'), marco({
-      items: ITEMS.map((i) => ({ id: i, badge: i === 'estudios' && nuevos ? nuevos : i === 'endoscopia' && Object.values(S.turnos).filter(turnoActivo).length ? Object.values(S.turnos).filter(turnoActivo).length : null })),
+      items: ITEMS.map((i) => ({ id: i, grupo: COMPLEMENTOS.includes(i) ? 'Complementos' : ['privacidad', 'ayuda'].includes(i) ? 'Tu cuenta' : null, badge: i === 'estudios' && nuevos ? nuevos : i === 'endoscopia' && Object.values(S.turnos).filter(turnoActivo).length ? Object.values(S.turnos).filter(turnoActivo).length : null })),
       principales: PRINCIPALES, actual: id, onIr: ir, onSalir: salir,
       usuario: `${S.perfil.nombre} ${S.perfil.apellido}`, rolTexto: 'Paciente',
       extraTop: barraDemo(programar), contenido,
@@ -155,22 +157,25 @@ export function appPaciente(perfil, { onSalir }) {
 
     return h('div.seccion',
       h('section.bienvenida', { style: estiloSeccion('inicio') },
-        h('div', h('small.fecha-larga', new Date(B.ahora()).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })), h('h1', `${saludo}, ${nombre}`), h('p', 'Este es el resumen de tu salud cardiometabólica.')),
+        h('div', h('small.fecha-larga', new Date(B.ahora()).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })), h('h1', `${saludo}, ${nombre}`), h('p', 'Tus turnos de endoscopia, tus próximos controles y tus estudios, en un solo lugar.')),
         h('div.bienvenida-comp', anilloComp, h('small', 'Ficha completa')),
         ecg({ alto: 60 })),
       avisos.length ? h('div.avisos', ...avisos) : null,
       tarjetaControlesPaciente(S.seg),
       puertasPortal(lista.length, nuevos.length),
       h('div.bento',
+        tile('datos', 'Mis datos', h('strong.num', `${ev.completitud.pct} %`), ev.completitud.faltan.length ? `Falta: ${ev.completitud.faltan.slice(0, 2).join(', ')}` : 'Completo'),
+        tile('privacidad', 'Privacidad', h('strong', 'Protegida'), 'Quién vio tus datos')),
+      h('section.bloque-extra',
+        h('div.bloque-extra-cab', h('h2', 'Complementos'), h('p', 'Metabolismo, cuerpo y corazón: un agregado para cuidarte también por fuera de lo digestivo.')),
+      h('div.bento.bento--extra',
         tile('cuerpo', 'Cuerpo', ev.comp ? h('span', cifra(ev.comp.imc, (v) => fmt(v, 1)), h('small', ' IMC')) : '—', ev.comp ? chip(ev.comp.categoria.nombre, ev.comp.categoria.id === 'normal' ? 'ok' : ['sobrepeso', 'bajo'].includes(ev.comp.categoria.id) ? 'aviso' : 'peligro') : 'Cargá peso y talla', pesos.length > 1 ? G.mini(pesos, 'var(--c1)') : null, true),
         tile('metabolismo', 'Metabolismo', ev.ener ? h('span', cifra(ev.ener.tmb, fmt0), h('small', ' kcal basal')) : '—', ev.ener ? `Gasto total ≈ ${fmt0(ev.ener.get)} kcal/día` : 'Faltan datos'),
         tile('corazon', 'Corazón', ev.categoria ? h('strong', { style: { color: ev.categoria.color } }, ev.categoria.nombre) : '—', p.ok ? `${fmt(p.cvd10, 1)} % de riesgo a 10 años` : 'Completá presión y colesterol', null, true),
         tile('laboratorio', 'Laboratorio', ev.labsInt.length ? h('span', cifra(ev.labsInt.length - labsMal, fmt0), h('small', ` de ${ev.labsInt.length} en rango`)) : '—', ev.labs.fecha ? `Análisis del ${fecha(ev.labs.fecha)}` : 'Sin análisis cargados'),
         tile('tratamiento', 'Tratamiento', plan?.estado === 'activo' ? h('strong', GL.farmaco(plan.farmaco)?.comercial || 'Activo') : h('strong', 'Sin plan'), plan?.estado === 'activo' ? `Desde el ${fecha(plan.inicio)}` : 'Orientación según tus datos'),
-        tile('estudios', 'Estudios', h('span', cifra(lista.length, fmt0), h('small', lista.length === 1 ? ' estudio' : ' estudios')), nuevos.length ? chip(`${nuevos.length} nuevos`, 'ok') : 'Al día'),
         tile('plan', 'Plan integral', ev.plan?.dieta ? h('span', cifra(ev.plan.dieta.kcal, fmt0), h('small', ' kcal/día')) : h('strong', '—'), ev.plan?.dieta ? ev.plan.dieta.patron : 'Completá tus datos'),
-        tile('datos', 'Mis datos', h('strong.num', `${ev.completitud.pct} %`), ev.completitud.faltan.length ? `Falta: ${ev.completitud.faltan.slice(0, 2).join(', ')}` : 'Completo'),
-        tile('privacidad', 'Privacidad', h('strong', 'Protegida'), 'Quién vio tus datos')),
+        )),
       tarjeta('Varios equipos a la vez', { icono: 'dispositivos', clase: 'card--sutil' }, h('p.ayuda', 'Podés usar la app en el teléfono, la tablet y la computadora al mismo tiempo: los cambios se sincronizan solos.')));
   }
 

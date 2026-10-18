@@ -201,7 +201,7 @@ function armar({ ev, F, medico, ops }) {
   }
 
   const cab = h('header.inf-cab',
-    h('div.inf-marca', h('img', { src: 'icons/logo-256.png', alt: '', width: 52, height: 52 }), h('div', h('strong', CONFIG.app.toUpperCase()), h('small', 'Salud cardiometabólica'))),
+    h('div.inf-marca', h('img', { src: 'icons/logo-256.png', alt: '', width: 52, height: 52 }), h('div', h('strong', CONFIG.app.toUpperCase()), h('small', 'Salud digestiva'))),
     h('div.inf-titulo', h('h1', 'Informe clínico cardiometabólico'), h('p', `${per.apellido || ''}, ${per.nombre || ''} · DNI ${dni}`)),
     h('dl.inf-meta', h('dt', 'Fecha'), h('dd', fechaHora(ahora)), h('dt', 'Informe N.º'), h('dd', nro), h('dt', 'Emitido por'), h('dd', nomMed)));
 

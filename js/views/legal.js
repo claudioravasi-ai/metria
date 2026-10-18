@@ -1,6 +1,7 @@
 /* ============================================================
-   Textos legales y vista de Privacidad.
-   MODELO — a revisar por un abogado matriculado antes de publicar.
+   Textos legales y vista de Privacidad, según la legislación argentina
+   (Leyes 25.326, 26.529, 17.132, 27.553 y Código Civil y Comercial) y la de
+   Tierra del Fuego (Constitución provincial, arts. 45 y 53; Ley provincial 885).
    Deben decir exactamente lo que la app hace (ver reglas-firebase.json).
    ============================================================ */
 
@@ -12,12 +13,30 @@ import { backend, exportarMisDatos, solicitar, VERSION_CONSENTIMIENTO } from '..
 import { campo, fuerzaClave } from '../ui/campos.js';
 
 const AAIP = 'La AGENCIA DE ACCESO A LA INFORMACIÓN PÚBLICA, en su carácter de Órgano de Control de la Ley N° 25.326, tiene la atribución de atender las denuncias y reclamos que interpongan quienes resulten afectados en sus derechos por incumplimiento de las normas vigentes en materia de protección de datos personales.';
+ /** Aviso médico-legal que va al pie de todas las pantallas. */
+export const AVISO_MEDICO = {
+  corto: 'En pocas palabras: la app te orienta y organiza tus turnos; quien decide es tu médico, en la consulta presencial.',
+  largo: 'Metria es una plataforma de gestión de turnos médicos de endoscopia digestiva y de seguimiento de controles. Los cálculos, clasificaciones, fechas sugeridas y demás resultados que la app genera en forma automática a partir de los datos que carga el paciente son aproximados y tienen carácter exclusivamente informativo y orientativo: se basan en guías de sociedades científicas pensadas para la población general y no constituyen diagnóstico, indicación terapéutica, prescripción ni acto médico. Cada persona es particular y diferente. La última palabra y la decisión corresponden al médico tratante en la consulta presencial, quien puede ratificar, rectificar o dejar sin efecto, total o parcialmente, lo que aquí se exponga, según los antecedentes patológicos, la medicación, los hábitos, los estudios previos y la situación clínica de cada paciente (Ley 26.529, art. 2, y Código Civil y Comercial, art. 59). No es un servicio de emergencias: ante sangrado abundante, dolor intenso, desmayo u otro síntoma grave, llamá al 107 o concurrí a la guardia más cercana.',
+};
+
+/** Pie médico-legal (portada y app). */
+export function pieLegal() {
+  return h('div.pie-legal', { role: 'note' },
+    h('p.pie-legal-corto', icono('info', { tam: 15 }), h('strong', AVISO_MEDICO.corto)),
+    h('p.pie-legal-largo', AVISO_MEDICO.largo),
+    h('p.pie-legal-links',
+      h('button.btn-link', { type: 'button', onclick: () => verTexto('Política de privacidad', POLITICA()) }, 'Política de privacidad'), ' · ',
+      h('button.btn-link', { type: 'button', onclick: () => verTexto('Términos de uso', TERMINOS()) }, 'Términos de uso'), ' · ',
+      h('span', 'Emergencias: 107')));
+}
+
 const ACCESO = 'El titular de los datos personales tiene la facultad de ejercer el derecho de acceso a los mismos en forma gratuita a intervalos no inferiores a seis meses, salvo que se acredite un interés legítimo al efecto conforme lo establecido en el artículo 14, inciso 3 de la Ley N° 25.326.';
 
 export const POLITICA = () => [
-  ['Quién es responsable', `${CONFIG.consultorio}. ${CONFIG.responsable}. Contacto para ejercer tus derechos: ${CONFIG.contacto}. La base de datos debe estar inscripta en el Registro Nacional de Bases de Datos de la AAIP.`],
+  ['Quién es responsable', `${CONFIG.consultorio}. ${CONFIG.responsable}. Contacto para ejercer tus derechos: ${CONFIG.contacto}. La base de datos está sujeta a inscripción en el Registro Nacional de Bases de Datos de la AAIP (Ley 25.326, art. 21).`],
+  ['Marco legal', 'Este tratamiento de datos se rige por la Ley 25.326 de Protección de los Datos Personales y su Decreto 1558/2001, la Ley 26.529 de Derechos del Paciente, Historia Clínica y Consentimiento Informado, la Ley 17.132 (secreto profesional) y, en la Provincia de Tierra del Fuego, Antártida e Islas del Atlántico Sur, por su Constitución, que garantiza a toda persona el derecho a conocer lo que de ella conste en registros, su finalidad, y a exigir su rectificación y actualización, y prohíbe proporcionar esos datos a terceros salvo interés legítimo (art. 45), y el derecho a la salud (art. 53), y por la Ley provincial 885 de adhesión a la Ley 26.529.'],
   ['Qué datos guardamos', 'Identificación (nombre, apellido, DNI, fecha de nacimiento, sexo biológico, correo y teléfono opcional), datos de salud que cargás vos o tu médico (medidas, presión, hábitos, enfermedades, medicación, laboratorio), el plan de tratamiento que indique tu médico, tu registro de síntomas y los estudios médicos que te cargue. Los datos de salud son datos sensibles (arts. 2 y 7 de la Ley 25.326).'],
-  ['Para qué', 'Únicamente para tu atención médica: calcular índices orientativos (metabolismo, IMC, riesgo cardiovascular), que tu médico evalúe tratamientos y que puedas retirar tus estudios. No se usan para publicidad, no se venden y no se ceden a terceros (art. 11).'],
+  ['Para qué', 'Únicamente para tu atención médica: gestionar tus turnos de endoscopia, organizar tus próximos controles, que puedas retirar tus estudios y, como complemento, calcular índices orientativos (metabolismo, IMC, riesgo cardiovascular). No se usan para publicidad, no se venden y no se ceden a terceros (art. 11).'],
   ['Quién los ve', 'Vos y los profesionales del consultorio autorizados uno por uno por el coordinador médico, todos obligados al secreto profesional (Ley 17.132, art. 11) y a la confidencialidad (Ley 25.326, art. 10). Cada apertura o descarga de un estudio queda registrada y la podés ver en esta sección.'],
   ['Dónde se guardan', 'En Firebase (Google Cloud), un servicio de terceros cuyos servidores pueden estar fuera de la Argentina. Al registrarte prestás consentimiento expreso para esa transferencia internacional (art. 12). Los datos viajan cifrados (HTTPS) y el proveedor los cifra en sus servidores; no es un cifrado "de punta a punta": el consultorio y el proveedor técnico podrían acceder bajo las reglas de seguridad publicadas.'],
   ['Análisis con inteligencia artificial', 'Si tu médico lo pide, la app envía a Anthropic (Claude, Estados Unidos) una copia de tu ficha SIN nombre, DNI, correo ni fecha de nacimiento (solo edad, sexo, medidas, enfermedades, medicación y análisis) para obtener una segunda opinión de apoyo. El resultado lo revisa tu médico; la IA no decide tu tratamiento. Anthropic no usa esos datos para entrenar sus modelos.'],
@@ -31,18 +50,20 @@ export const POLITICA = () => [
 ];
 
 export const TERMINOS = () => [
-  ['Qué es la app', `${CONFIG.app} acompaña la atención de tu médico: hace cálculos orientativos con fórmulas publicadas (Mifflin-St Jeor, IMC, PREVENT de la AHA, CKD-EPI, entre otras) y te permite retirar estudios.`],
-  ['No reemplaza la consulta', 'Los resultados son orientativos y pueden ser inexactos si los datos cargados no son correctos. No es un servicio de emergencias: ante síntomas graves, llamá al 107 o andá a una guardia.'],
+  ['Qué es la app', `${CONFIG.app} es una plataforma de turnos médicos de endoscopia digestiva y de seguimiento de controles (endoscopia alta y colonoscopia), que además te permite retirar tus estudios. Como complemento, hace cálculos orientativos con fórmulas publicadas (Mifflin-St Jeor, IMC, PREVENT de la AHA, CKD-EPI, entre otras).`],
+  ['No reemplaza la consulta', AVISO_MEDICO.largo],
+  ['Consentimiento informado', 'El consentimiento que firmás en la app informa sobre el estudio, sus riesgos y alternativas (Ley 26.529, arts. 5 a 7, y Código Civil y Comercial, art. 59). Podés hacer todas las preguntas que necesites antes del estudio y revocarlo en cualquier momento antes de que se realice.'],
   ['Medicación', 'La app no indica medicamentos por sí sola. Las sugerencias del motor son apoyo para tu médico, quien decide la indicación, la dosis y emite la receta por una plataforma registrada (Ley 27.553). Nunca te automediques.'],
   ['Historia clínica', 'La app no es la historia clínica oficial (Ley 26.529): el original queda en el consultorio. La app es un canal para que veas tus datos y retires tus estudios.'],
   ['Tu cuenta', 'Es personal: no compartas los códigos que te llegan ni tu contraseña (profesionales). Avisá enseguida si sospechás que alguien entró a tu cuenta o a tu correo.'],
+  ['Ley aplicable', 'Estos términos y la política de privacidad se rigen por las leyes de la República Argentina y de la Provincia de Tierra del Fuego, Antártida e Islas del Atlántico Sur.'],
   ['Profesionales', 'Los profesionales declaran estar matriculados, usan la app bajo su responsabilidad profesional y se comprometen a la confidencialidad y al secreto profesional. El coordinador médico verifica la matrícula y autoriza a cada uno antes de que pueda entrar.'],
 ];
 
 export function verTexto(titulo, secciones) {
   const m = modal({
     titulo, ancho: 720, clase: 'modal--texto',
-    cuerpo: h('div.texto-legal', h('p.modelo', icono('info', { tam: 16 }), 'Modelo a revisar por un abogado matriculado antes de usar con pacientes reales.'),
+    cuerpo: h('div.texto-legal',
       ...secciones.map(([t, p]) => h('section', h('h4', t), h('p', p)))),
     acciones: [h('button.btn.btn--primario', { onclick: () => m.cerrar() }, 'Entendido')],
   });

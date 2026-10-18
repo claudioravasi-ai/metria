@@ -24,6 +24,11 @@ export const CATEGORIAS = CAT;
    proximo: tipo del próximo estudio cuando no es el mismo (p. ej. rectoscopia → colonoscopia). */
 const r = (riesgo, meses, texto, guia, extra = {}) => ({ riesgo, meses, texto, guia, ...extra });
 
+/** Rastreo de colon después de una colonoscopia sin hallazgos de riesgo: criterio del consultorio
+ *  (decisión de CLAU, 17-10-2026) = 5 años. ESGE 2020 y USMSTF indican 10 años. */
+export const RASTREO_COLON_MESES = 60;
+const RASTREO_TXT = 'a los 5 años (criterio del consultorio; ESGE 2020 indica 10 años)';
+
 /** Endoscopia alta. a: datos del informe; edad en años. */
 export function evaluarAlta(a = {}, { edad } = {}) {
   const out = [];
@@ -64,8 +69,8 @@ export function evaluarBaja(b = {}, { edad } = {}) {
   const out = [];
   const adenomas = +b.adenomas || 0, serrados = +b.serrados || 0, tam = +b.tamanoMax || 0;
   if (b.neoplasia) out.push(r('muy-alto', 0, 'Lesión sospechosa de cáncer: estadificación y derivación a oncología/cirugía; la vigilancia se define después del tratamiento.', 'ESGE'));
-  if (b.incompleta) out.push(r('intermedio', 3, 'Colonoscopia incompleta (no se llegó al ciego): completar a la brevedad con nueva colonoscopia o colonografía por tomografía.', 'ESGE', { serie: [3, 120] }));
-  if (b.preparacion === 'inadecuada') out.push(r('intermedio', 12, 'Preparación inadecuada (Boston < 6 o algún segmento < 2): repetir dentro del año, con preparación reforzada.', 'ESGE preparación 2019', { serie: [12, 120] }));
+  if (b.incompleta) out.push(r('intermedio', 3, 'Colonoscopia incompleta (no se llegó al ciego): completar a la brevedad con nueva colonoscopia o colonografía por tomografía.', 'ESGE', { serie: [3, RASTREO_COLON_MESES] }));
+  if (b.preparacion === 'inadecuada') out.push(r('intermedio', 12, 'Preparación inadecuada (Boston < 6 o algún segmento < 2): repetir dentro del año, con preparación reforzada.', 'ESGE preparación 2019', { serie: [12, RASTREO_COLON_MESES] }));
   if (b.piecemeal) out.push(r('muy-alto', 6, 'Pólipo ≥ 20 mm resecado en fragmentos (piecemeal): control del sitio a los 3-6 meses y luego a los 12 meses.', 'ESGE 2020', { serie: [6, 12, 36, 60] }));
   if (adenomas >= 10) out.push(r('muy-alto', 12, '10 o más adenomas: control al año y asesoramiento genético (descartar poliposis).', 'ESGE 2020', { serie: [12, 12, 12, 12, 12, 12, 12, 12, 12, 12] }));
   const altoRiesgo = [];
@@ -74,11 +79,11 @@ export function evaluarBaja(b = {}, { edad } = {}) {
   if (b.displasiaAlta) altoRiesgo.push('adenoma con displasia de alto grado');
   if (serrados && b.serradoGrande) altoRiesgo.push('pólipo serrado ≥ 10 mm');
   if (serrados && b.serradoDisplasia) altoRiesgo.push('pólipo serrado con displasia');
-  if (altoRiesgo.length && adenomas < 10 && !b.piecemeal) out.push(r('alto', 36, `Pólipos de alto riesgo (${altoRiesgo.join(', ')}): colonoscopia de vigilancia a los 3 años. Si ese control es normal, el siguiente a los 5 años.`, 'ESGE 2020', { usmstf: 'USMSTF 2020: 3 años.', serie: [36, 60, 120] }));
-  else if (!altoRiesgo.length && (adenomas || serrados)) out.push(r('bajo', 120, `Pólipos de bajo riesgo (${adenomas ? `${adenomas} adenoma${adenomas > 1 ? 's' : ''} < 10 mm sin displasia de alto grado` : ''}${adenomas && serrados ? ' y ' : ''}${serrados ? `${serrados} serrado${serrados > 1 ? 's' : ''} < 10 mm sin displasia` : ''}): sin vigilancia especial; volver al rastreo (test de sangre oculta) o nueva colonoscopia a los 10 años.`, 'ESGE 2020',
+  if (altoRiesgo.length && adenomas < 10 && !b.piecemeal) out.push(r('alto', 36, `Pólipos de alto riesgo (${altoRiesgo.join(', ')}): colonoscopia de vigilancia a los 3 años. Si ese control es normal, el siguiente a los 5 años.`, 'ESGE 2020', { usmstf: 'USMSTF 2020: 3 años.', serie: [36, 60, RASTREO_COLON_MESES] }));
+  else if (!altoRiesgo.length && (adenomas || serrados)) out.push(r('bajo', RASTREO_COLON_MESES, `Pólipos de bajo riesgo (${adenomas ? `${adenomas} adenoma${adenomas > 1 ? 's' : ''} < 10 mm sin displasia de alto grado` : ''}${adenomas && serrados ? ' y ' : ''}${serrados ? `${serrados} serrado${serrados > 1 ? 's' : ''} < 10 mm sin displasia` : ''}): sin vigilancia especial; volver al rastreo (test de sangre oculta) o nueva colonoscopia ${RASTREO_TXT}.`, 'ESGE 2020',
     { usmstf: adenomas <= 2 && !serrados ? 'USMSTF 2020: 7 a 10 años.' : 'USMSTF 2020: 3 a 5 años.' }));
-  if (b.hiperplasicos && !adenomas && !serrados) out.push(r('bajo', 120, 'Pólipos hiperplásicos pequeños de recto-sigma: no aumentan el riesgo; nueva colonoscopia a los 10 años.', 'ESGE 2020'));
-  if (!out.length) out.push(r('bajo', 120, 'Colonoscopia completa, con buena preparación y sin pólipos: nueva colonoscopia de rastreo a los 10 años (antes si aparecen síntomas o antecedentes familiares nuevos).', 'ESGE 2020'));
+  if (b.hiperplasicos && !adenomas && !serrados) out.push(r('bajo', RASTREO_COLON_MESES, `Pólipos hiperplásicos pequeños de recto-sigma: no aumentan el riesgo; nueva colonoscopia ${RASTREO_TXT}.`, 'ESGE 2020', { serie: [RASTREO_COLON_MESES, RASTREO_COLON_MESES] }));
+  if (!out.length) out.push(r('bajo', RASTREO_COLON_MESES, `Colonoscopia completa, con buena preparación y sin pólipos: nueva colonoscopia de rastreo ${RASTREO_TXT} (antes si aparecen síntomas o antecedentes familiares nuevos).`, 'ESGE 2020', { serie: [RASTREO_COLON_MESES, RASTREO_COLON_MESES] }));
   if (b.familiarCCR) out.push(r('intermedio', 60, 'Familiar de 1.er grado con cáncer colorrectal: el rastreo suele hacerse cada 5 años (según la edad del familiar); aplicar el intervalo más corto.', 'Consensos de rastreo', { serie: [60, 60] }));
   if (edad >= 80) out.push(r('bajo', null, 'Con 80 años o más, ESGE sugiere suspender la vigilancia según comorbilidades y expectativa de vida.', 'ESGE 2020'));
   return out;

@@ -9,6 +9,7 @@ import { SECCIONES, estiloSeccion, modal, toast, fechaHora, confirmar } from '..
 import { CONFIG, MS_DIA } from '../config.js';
 import { backend } from '../data/servicio.js';
 import { instalar, yaInstalada } from '../core/instalar.js';
+import { pieLegal } from './legal.js';
 
 /* ---------- Tema claro / oscuro (preferencia local del equipo) ---------- */
 export function temaInicial() {
@@ -69,13 +70,15 @@ export function barraDemo(alCambiar) {
  * items: [{ id, nombre?, icono?, badge? }] · principales: ids para la barra inferior
  */
 export function marco({ items, principales, actual, onIr, usuario, rolTexto, onSalir, contenido, extraTop }) {
+  // Rótulo de grupo (p. ej. «Complementos») antes del primer ítem de cada grupo
+  const rotulo = (it, i, lista, clase = 'nav-grupo') => (it.grupo && it.grupo !== lista[i - 1]?.grupo ? h(`div.${clase}`, it.grupo) : null);
   const nav = (clase) => h(`nav.${clase}`, { 'aria-label': 'Secciones' },
-    ...items.map((it) => {
+    ...items.map((it, i) => {
       const s = SECCIONES[it.id] || {};
-      return h('a.nav-item', {
+      return [rotulo(it, i, items), h('a.nav-item', {
         href: `#${it.id}`, 'aria-current': it.id === actual ? 'page' : null, style: estiloSeccion(it.id),
         onclick: (e) => { e.preventDefault(); onIr(it.id); },
-      }, h('span.nav-ico', icono(it.icono || s.icono, { tam: 20 })), h('span.nav-txt', it.nombre || s.nombre), it.badge ? h('span.nav-badge', String(it.badge)) : null);
+      }, h('span.nav-ico', icono(it.icono || s.icono, { tam: 20 })), h('span.nav-txt', it.nombre || s.nombre), it.badge ? h('span.nav-badge', String(it.badge)) : null)];
     }));
 
   const masItems = items.filter((i) => !principales.includes(i.id));
@@ -83,10 +86,10 @@ export function marco({ items, principales, actual, onIr, usuario, rolTexto, onS
     const m = modal({
       titulo: 'Más secciones', clase: 'modal--hoja', ancho: 520,
       cuerpo: h('div.hoja-grid',
-        ...masItems.map((it) => {
+        ...masItems.map((it, i) => {
           const s = SECCIONES[it.id] || {};
-          return h('button.hoja-item', { type: 'button', style: estiloSeccion(it.id), onclick: () => { m.cerrar(); onIr(it.id); } },
-            h('span.nav-ico', icono(it.icono || s.icono, { tam: 22 })), h('span', it.nombre || s.nombre), it.badge ? h('span.nav-badge', String(it.badge)) : null);
+          return [rotulo(it, i, masItems, 'hoja-grupo'), h('button.hoja-item', { type: 'button', style: estiloSeccion(it.id), onclick: () => { m.cerrar(); onIr(it.id); } },
+            h('span.nav-ico', icono(it.icono || s.icono, { tam: 22 })), h('span', it.nombre || s.nombre), it.badge ? h('span.nav-badge', String(it.badge)) : null)];
         }),
         h('button.hoja-item', { type: 'button', onclick: () => { m.cerrar(); alternarTema(); } }, h('span.nav-ico', icono('luna', { tam: 22 })), h('span', 'Tema claro / oscuro')),
         yaInstalada() ? null : h('button.hoja-item', { type: 'button', onclick: () => { m.cerrar(); instalar(); } }, h('span.nav-ico', icono('bajar', { tam: 22 })), h('span', 'Instalar app')),
@@ -122,7 +125,7 @@ export function marco({ items, principales, actual, onIr, usuario, rolTexto, onS
   ambiente(actual);
   return h('div.app',
     lateral,
-    h('div.principal', top, extraTop || null, h('main.contenido#contenido', { tabindex: -1, style: estiloSeccion(actual) }, contenido)),
+    h('div.principal', top, extraTop || null, h('main.contenido#contenido', { tabindex: -1, style: estiloSeccion(actual) }, contenido), h('footer.app-pie', pieLegal())),
     inferior);
 }
 
