@@ -3,6 +3,18 @@
    Acepta h('div.clase#id', {props}, hijos) y h('div', hijo, hijo).
    ============================================================ */
 
+/* replaceChildren/append/prepend nativos convierten null en el texto «null»:
+   se descartan los hijos vacíos (null, undefined, false) en toda la app. */
+for (const proto of [Element.prototype, DocumentFragment.prototype, Document.prototype]) {
+  for (const m of ['replaceChildren', 'append', 'prepend']) {
+    const orig = proto[m];
+    if (!orig || orig.__sinNull) continue;
+    const envuelto = function (...hijos) { return orig.apply(this, hijos.filter((x) => x !== null && x !== undefined && x !== false)); };
+    envuelto.__sinNull = true;
+    proto[m] = envuelto;
+  }
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SVG_TAGS = new Set(['svg', 'g', 'path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon', 'text', 'tspan',
   'defs', 'linearGradient', 'radialGradient', 'stop', 'clipPath', 'mask', 'use', 'title', 'filter', 'feGaussianBlur', 'feDropShadow', 'pattern']);

@@ -15,7 +15,7 @@ import { h, montar } from '../core/dom.js';
 import { icono } from '../core/iconos.js';
 import { toast, aviso, chip, fmt, fmt0 } from '../core/ui.js';
 import { CONFIG } from '../config.js';
-import { backend, registrarMedico, completarMedico, pedirCodigo, ingresarConCodigo, completarAltaPaciente, ingresarConPin, restablecerPin, crearPin, pinDebil } from '../data/servicio.js';
+import { backend, registrarMedico, completarMedico, pedirCodigo, ingresarConCodigo, completarAltaPaciente, ingresarConDni } from '../data/servicio.js';
 import { campo, segmentado, fuerzaClave, deslizador } from '../ui/campos.js';
 import * as G from '../ui/graficos.js';
 import { inclinar, revelar, contar, ecg } from '../ui/efectos.js';
@@ -46,14 +46,10 @@ const MSG = {
   'codigo/sin-servidor': 'El ingreso con código todavía no está configurado en este consultorio.',
   'codigo/es-profesional': 'Ese correo es de una cuenta profesional: ingresá por «Soy profesional».',
   'alta/correo': 'El correo no coincide con el que validaste con el código.',
-  'pin/incorrecto': 'El PIN no es correcto.',
-  'pin/vencido': 'Pasó demasiado tiempo. Pedí un código nuevo.',
-  'pin/bloqueado': 'Demasiados intentos. Por seguridad, pedí un código nuevo.',
-  'pin/espera': 'Por seguridad el ingreso quedó bloqueado 15 minutos. Probá más tarde.',
-  'pin/debil': 'Elegí un PIN menos fácil de adivinar.',
-  'pin/dni': 'El DNI no coincide con el de tu cuenta.',
-  'pin/existe': 'Ya tenés un PIN creado.',
-  'codigo/incorrecto-pin': 'El PIN no es correcto.',
+  'dni/incorrecto': 'El DNI no coincide con el de tu ficha.',
+  'dni/vencido': 'Pasó demasiado tiempo. Pedí un código nuevo.',
+  'dni/bloqueado': 'Demasiados intentos. Por seguridad, pedí un código nuevo.',
+  'dni/espera': 'Por seguridad el ingreso quedó bloqueado 15 minutos. Probá más tarde.',
 };
 const mensaje = (e) => MSG[e?.code] || (/permission|PERMISSION_DENIED/i.test(`${e?.code} ${e?.message}`) ? 'La base de datos rechazó el guardado: falta publicar las reglas de seguridad en Firebase (Realtime Database → Reglas).' : 'No se pudo completar. Intentá de nuevo.');
 const correoValido = (e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(e || '').trim());
@@ -208,7 +204,7 @@ export function portada() {
       h('div.seccion-titulo', { 'data-revelar': '' }, h('h2', '¿Cómo querés entrar?')),
       h('div.puertas',
         puerta('paciente', 'Soy paciente', 'Creá tu cuenta en un minuto, sin contraseña.', 'usuario', '#06b6d4', '#6366f1',
-          ['Código al correo + tu PIN', 'Turnos de endoscopia con ticket QR', 'Tus estudios con aviso de privacidad'], () => ingresoPaciente()),
+          ['Código al correo + tu DNI', 'Turnos de endoscopia con ticket QR', 'Tus estudios con aviso de privacidad'], () => ingresoPaciente()),
         puerta('medico', 'Soy profesional', 'Ingreso con matrícula, autorizado por el coordinador.', 'estetoscopio', '#f43f5e', '#8b5cf6',
           ['Seguimiento por DNI y calendario a 10 años', 'Turnos, prequirúrgico y carga de estudios', 'Solo con autorización del coordinador'], () => ingresoProfesional()))),
     B.modo === 'demo' ? h('section.demo-accesos', { 'data-revelar': '' },
@@ -315,7 +311,7 @@ function pasoCodigo({ email, demo, alta }) {
     btn.disabled = true; btn.textContent = 'Verificando…';
     try {
       const r = await ingresarConCodigo(email, valor(), recordar.checked);
-      if (r?.pin === 'pedir') pasoPin({ email, ticket: r.ticket, recordar: recordar.checked });
+      if (r?.dni === 'pedir') pasoDni({ email, ticket: r.ticket, recordar: recordar.checked });
     }
     catch (er) {
       error.textContent = mensaje(er);
@@ -328,113 +324,33 @@ function pasoCodigo({ email, demo, alta }) {
   setTimeout(() => cajas[0].focus(), 80);
 }
 
-/* ---------- Segundo factor: PIN personal de 6 números ---------- */
-function cajasPin(alCompletar) {
-  const cajas = Array.from({ length: 6 }, (_, i) => h('input.otp.otp--pin', { type: 'password', inputmode: 'numeric', autocomplete: 'off', maxlength: 1, 'aria-label': `Número ${i + 1} del PIN` }));
-  const valor = () => cajas.map((c) => c.value).join('');
-  cajas.forEach((c, i) => {
-    c.addEventListener('input', () => {
-      c.value = c.value.replace(/\D/g, '').slice(-1);
-      if (c.value && i < 5) cajas[i + 1].focus();
-      if (valor().length === 6) alCompletar?.(valor());
-    });
-    c.addEventListener('keydown', (e) => { if (e.key === 'Backspace' && !c.value && i) { cajas[i - 1].focus(); cajas[i - 1].value = ''; } });
-  });
-  return { el: h('div.otp-fila', ...cajas), valor, limpiar: () => { cajas.forEach((c) => { c.value = ''; }); cajas[0].focus(); }, foco: () => cajas[0].focus() };
-}
-
-/** Paso 3 del ingreso: el PIN (después del código del correo). */
-function pasoPin({ email, ticket, recordar }) {
+/* ---------- Segundo paso: el DNI de la ficha (después del código del correo) ---------- */
+function pasoDni({ email, ticket, recordar }) {
+  const dni = h('input', { type: 'text', inputmode: 'numeric', maxlength: 10, id: 'ingreso-dni', autocomplete: 'off', placeholder: 'Solo números' });
   const error = h('div.form-error', { role: 'alert' });
   const btn = h('button.btn.btn--primario.btn--grande.btn--bloque.btn--brillo', { type: 'submit' }, icono('candado', { tam: 18 }), 'Entrar');
-  const pin = cajasPin(() => form.requestSubmit());
   const form = h('form.form-acceso', { novalidate: true },
-    h('ol.pasos-alta', h('li.hecho', h('span', icono('ok', { tam: 14 })), 'Correo'), h('li.hecho', h('span', icono('ok', { tam: 14 })), 'Código'), h('li.actual', h('span', '3'), 'PIN')),
-    h('p.codigo-a', 'Código correcto. Ahora ingresá tu ', h('strong', 'PIN personal de 6 números'), ' (el segundo factor que creaste la primera vez).'),
-    pin.el, error, btn,
-    h('div.form-links', h('button.btn-link', { type: 'button', onclick: () => olvidePin({ email, ticket, recordar }) }, 'Me olvidé el PIN')));
+    h('ol.pasos-alta', h('li.hecho', h('span', icono('ok', { tam: 14 })), 'Correo'), h('li.hecho', h('span', icono('ok', { tam: 14 })), 'Código'), h('li.actual', h('span', '3'), 'DNI')),
+    h('p.codigo-a', 'Código correcto. Para terminar, escribí ', h('strong', 'tu DNI'), ' (el mismo de tu ficha).'),
+    h('div.campo', h('label', { for: 'ingreso-dni' }, 'Tu DNI'), dni), error, btn,
+    h('div.form-links', h('button.btn-link', { type: 'button', onclick: () => ingresoPaciente(email) }, 'Cambiar el correo')));
+  dni.addEventListener('input', () => { dni.value = dni.value.replace(/\D/g, '').slice(0, 10); });
   let enviando = false;
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (enviando) return;
     error.textContent = '';
-    if (pin.valor().length !== 6) { error.textContent = 'Completá los 6 números.'; return; }
+    if (dni.value.length < 6) { error.textContent = 'Escribí tu DNI completo, solo números.'; return; }
     enviando = true; btn.disabled = true;
-    try { await ingresarConPin(email, ticket, pin.valor(), recordar); }
+    try { await ingresarConDni(email, ticket, dni.value, recordar); }
     catch (er) {
       error.textContent = mensaje(er); btn.disabled = false; enviando = false;
-      if (['pin/bloqueado', 'pin/vencido', 'pin/espera'].includes(er.code)) { setTimeout(() => ingresoPaciente(email), 2500); return; }
-      form.classList.remove('sacudir'); void form.offsetWidth; form.classList.add('sacudir'); pin.limpiar();
+      if (['dni/bloqueado', 'dni/vencido', 'dni/espera'].includes(er.code)) { setTimeout(() => ingresoPaciente(email), 2500); return; }
+      form.classList.remove('sacudir'); void form.offsetWidth; form.classList.add('sacudir'); dni.select();
     }
   });
-  pantalla(tarjetaAcceso('paciente', 'Tu PIN', 'Segundo factor de seguridad', form));
-  setTimeout(pin.foco, 80);
-}
-
-function olvidePin({ email, ticket, recordar }) {
-  const dni = h('input', { type: 'text', inputmode: 'numeric', maxlength: 10, id: 'pin-dni', autocomplete: 'off' });
-  const error = h('div.form-error', { role: 'alert' });
-  const btn = h('button.btn.btn--primario.btn--grande.btn--bloque', { type: 'submit' }, 'Validar y crear un PIN nuevo');
-  const form = h('form.form-acceso', { novalidate: true },
-    h('p', 'Como ya validaste tu correo con el código, confirmá tu identidad con el DNI de tu cuenta y creás un PIN nuevo.'),
-    h('div.campo', h('label', { for: 'pin-dni' }, 'Tu DNI'), dni), error, btn,
-    h('div.form-links', h('button.btn-link', { type: 'button', onclick: () => pasoPin({ email, ticket, recordar }) }, 'Volver al PIN')));
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    error.textContent = '';
-    btn.disabled = true;
-    try { await restablecerPin(email, ticket, dni.value, recordar); }
-    catch (er) { error.textContent = mensaje(er); btn.disabled = false; if (['pin/bloqueado', 'pin/vencido'].includes(er.code)) setTimeout(() => ingresoPaciente(email), 2500); }
-  });
-  pantalla(tarjetaAcceso('paciente', 'Me olvidé el PIN', 'Lo recuperás con tu DNI', form));
-  setTimeout(() => dni.focus(), 60);
-}
-
-/** Primera vez (o después de recuperarlo): el paciente crea su PIN antes de entrar al portal. */
-export function pantallaCrearPin(perfil, onListo) {
-  const error = h('div.form-error', { role: 'alert' });
-  let primero = null;
-  const titulo = h('p.codigo-a');
-  const btn = h('button.btn.btn--primario.btn--grande.btn--bloque.btn--brillo', { type: 'submit' }, 'Continuar');
-  let pin;
-  const montarPaso = () => {
-    titulo.replaceChildren(...(primero ? ['Repetí el PIN para confirmarlo.'] : ['Elegí un ', h('strong', 'PIN de 6 números'), '. Desde ahora, cada vez que entres te vamos a pedir el código del correo ', h('strong', 'y'), ' este PIN.']));
-    const nuevo = cajasPin(() => form.requestSubmit());
-    if (pin) pin.el.replaceWith(nuevo.el);
-    pin = nuevo;
-    btn.textContent = primero ? 'Guardar mi PIN' : 'Continuar';
-    setTimeout(pin.foco, 60);
-  };
-  const form = h('form.form-acceso', { novalidate: true },
-    h('div.pin-escudo', icono('escudo', { tam: 30 })), titulo, h('div.pin-lugar'), error, btn,
-    h('p.ayuda', 'No uses tu fecha de nacimiento ni números seguidos. Nadie del consultorio te lo va a pedir.'),
-    h('div.form-links', h('button.btn-link', { type: 'button', onclick: () => backend().salir() }, 'Salir')));
-  montarPaso();
-  form.querySelector('.pin-lugar').replaceWith(pin.el);
-  let enviando = false;
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (enviando) return;
-    error.textContent = '';
-    const v = pin.valor();
-    if (!primero) {
-      const debil = pinDebil(v, perfil?.fechaNac);
-      if (debil) { error.textContent = debil; pin.limpiar(); return; }
-      primero = v; montarPaso(); return;
-    }
-    if (v !== primero) { error.textContent = 'Los dos PIN no coinciden. Empezá de nuevo.'; primero = null; montarPaso(); return; }
-    enviando = true; btn.disabled = true;
-    try {
-      await crearPin(v);
-      try { sessionStorage.removeItem('metria-crear-pin'); } catch { /* */ }
-      toast('PIN creado: tu cuenta tiene doble factor', 'ok', 5000);
-      onListo();
-    } catch (er) {
-      if (er.code === 'pin/existe') { try { sessionStorage.removeItem('metria-crear-pin'); } catch { /* */ } onListo(); return; }
-      error.textContent = mensaje(er); btn.disabled = false; enviando = false;
-    }
-  });
-  pantalla(tarjetaAcceso('paciente-sesion', 'Creá tu PIN', 'Segundo factor de seguridad', form));
+  pantalla(tarjetaAcceso('paciente', 'Tu DNI', 'Último paso para entrar', form));
+  setTimeout(() => dni.focus(), 80);
 }
 
 /** Alta de pacientes, paso 1: nombre, apellido, DNI y correo (+ consentimiento). */
@@ -449,7 +365,7 @@ export function registroPaciente() {
   };
   const consent = [
     ['datos', h('span', 'Acepto la ', h('button.btn-link', { type: 'button', onclick: () => verTexto('Política de privacidad', POLITICA()) }, 'política de privacidad'), ' y presto consentimiento expreso para el tratamiento de mis datos de salud con fines de atención médica (Ley 25.326, arts. 5 y 7).')],
-    ['transf', h('span', 'Entiendo que los datos se alojan en servidores de un proveedor (Google Firebase) que pueden estar fuera de la Argentina y consiento esa transferencia (art. 12). Si mi médico lo pide, una copia sin mi nombre ni DNI puede analizarse con IA (Anthropic, EE. UU.).')],
+    ['transf', h('span', 'Entiendo que los datos se alojan en servidores de un proveedor (Google Firebase) que pueden estar fuera de la Argentina y consiento esa transferencia (art. 12). Si mi médico lo pide, una copia sin mi nombre ni DNI puede analizarse con IA (Anthropic, EE. UU., o DeepSeek, China).')],
     ['terminos', h('span', 'Acepto los ', h('button.btn-link', { type: 'button', onclick: () => verTexto('Términos de uso', TERMINOS()) }, 'términos de uso'), ' y entiendo que los resultados de la app son orientativos: la decisión final la toma mi médico en la consulta presencial.')],
     ['mayor', h('span', 'Soy mayor de 18 años.')],
   ].map(([k, txt]) => { const i = h('input', { type: 'checkbox', name: k, checked: !!previo.consentimiento }); return { k, i, el: h('label.check.check--legal', i, txt) }; });
@@ -502,7 +418,7 @@ export function pantallaCompletarAlta(u, onListo) {
   };
   const consent = yaTiene ? [] : [
     h('span', 'Acepto la política de privacidad y el tratamiento de mis datos de salud con fines de atención médica (Ley 25.326).'),
-    h('span', 'Consiento que los datos se alojen en servidores de Google Firebase, que pueden estar fuera de la Argentina, y que mi médico pueda analizar una copia sin mi nombre ni DNI con IA (Anthropic, EE. UU.).'),
+    h('span', 'Consiento que los datos se alojen en servidores de Google Firebase, que pueden estar fuera de la Argentina, y que mi médico pueda analizar una copia sin mi nombre ni DNI con IA (Anthropic, EE. UU., o DeepSeek, China).'),
     h('span', 'Acepto los términos de uso y soy mayor de 18 años.'),
   ].map((txt) => { const i = h('input', { type: 'checkbox' }); return { i, el: h('label.check.check--legal', i, txt) }; });
   const btn = h('button.btn.btn--primario.btn--grande.btn--bloque.btn--brillo', { type: 'submit' }, icono('ok', { tam: 18 }), 'Listo, entrar');

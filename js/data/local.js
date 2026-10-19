@@ -393,59 +393,31 @@ export async function ingresarConCodigo(email, codigo, recordar = false) {
   if (cuenta?.hash) throw errorAuth('codigo/es-profesional');
   const uid = cuenta?.uid || (await uidPaciente(e));
   if (!cuenta) await tx('cuentas', 'readwrite', (s) => s.put({ uid, tipo: 'paciente' }, e));
-  // Segundo factor: si ya tiene PIN, se pide antes de abrir la sesión
-  if (cuenta?.pinHash) {
+  // Segundo paso: si ya tiene ficha con DNI, se pide antes de abrir la sesión (el paciente nuevo lo carga en el alta)
+  if (arbol.pacientes?.[uid]?.perfil?.dni) {
     const ticket = nuevaClave();
     tickets.set(e, { ticket, exp: ahora() + 5 * 60000, intentos: 0 });
-    return { pin: 'pedir', ticket };
+    return { dni: 'pedir', ticket };
   }
-  marcarCrearPin();
   await abrirSesion({ uid, email: e, paciente: true }, recordar);
-  return { pin: 'crear' };
+  return {};
 }
 
-/* Segundo factor de los pacientes: PIN de 6 números (en la demo, con PBKDF2 en este navegador) */
+/* Segundo paso de los pacientes: el DNI de su ficha (reemplaza al PIN desde la 1.6.2) */
 const tickets = new Map();
-const marcarCrearPin = () => { try { sessionStorage.setItem('metria-crear-pin', '1'); } catch { /* */ } };
-function ticketValido(e, ticket) {
+export async function ingresarConDni(email, ticket, dni, recordar = false) {
+  const e = normEmail(email);
   const x = tickets.get(e);
-  if (!x || x.ticket !== ticket || x.exp < ahora()) { tickets.delete(e); throw errorAuth('pin/vencido'); }
-  return x;
-}
-export async function ingresarConPin(email, ticket, pin, recordar = false) {
-  const e = normEmail(email);
-  const x = ticketValido(e, ticket);
-  const c = await tx('cuentas', 'readonly', (s) => req(s.get(e)));
-  if (!c?.pinHash || (await derivar(String(pin), c.pinSal)) !== c.pinHash) {
-    x.intentos++;
-    if (x.intentos >= 5) { tickets.delete(e); throw errorAuth('pin/bloqueado'); }
-    throw errorAuth('pin/incorrecto');
-  }
-  tickets.delete(e);
-  await abrirSesion({ uid: c.uid, email: e, paciente: true }, recordar);
-}
-export async function restablecerPin(email, ticket, dni, recordar = false) {
-  const e = normEmail(email);
-  const x = ticketValido(e, ticket);
+  if (!x || x.ticket !== ticket || x.exp < ahora()) { tickets.delete(e); throw errorAuth('dni/vencido'); }
   const c = await tx('cuentas', 'readonly', (s) => req(s.get(e)));
   const per = arbol.pacientes?.[c?.uid]?.perfil;
-  if (!per || String(per.dni) !== String(dni).replace(/\D/g, '')) {
+  if (!per?.dni || String(per.dni).replace(/\D/g, '') !== String(dni).replace(/\D/g, '')) {
     x.intentos++;
-    if (x.intentos >= 5) { tickets.delete(e); throw errorAuth('pin/bloqueado'); }
-    throw errorAuth('pin/dni');
+    if (x.intentos >= 5) { tickets.delete(e); throw errorAuth('dni/bloqueado'); }
+    throw errorAuth('dni/incorrecto');
   }
   tickets.delete(e);
-  await tx('cuentas', 'readwrite', (s) => s.put({ uid: c.uid, tipo: 'paciente' }, e));
-  marcarCrearPin();
   await abrirSesion({ uid: c.uid, email: e, paciente: true }, recordar);
-}
-export async function crearPin(pin) {
-  if (!sesion?.paciente) throw errorAuth('auth/no-session');
-  const c = await tx('cuentas', 'readonly', (s) => req(s.get(sesion.email)));
-  if (c?.pinHash) throw errorAuth('pin/existe');
-  const pinSal = hex(crypto.getRandomValues(new Uint8Array(16)));
-  const pinHash = await derivar(String(pin), pinSal);
-  await tx('cuentas', 'readwrite', (s) => s.put({ uid: sesion.uid, tipo: 'paciente', pinSal, pinHash }, sesion.email));
 }
 
 export async function salir() {

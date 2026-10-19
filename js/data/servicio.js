@@ -58,18 +58,7 @@ const limpiar = (s) => String(s ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
 /** Pedido del código de ingreso para pacientes (alta o ingreso: es el mismo paso). */
 export const pedirCodigo = (email) => B.pedirCodigo(email);
 export const ingresarConCodigo = (email, codigo, recordar) => B.ingresarConCodigo(email, codigo, recordar);
-export const ingresarConPin = (email, ticket, pin, recordar) => B.ingresarConPin(email, ticket, pin, recordar);
-export const restablecerPin = (email, ticket, dni, recordar) => B.restablecerPin(email, ticket, dni, recordar);
-export const crearPin = (pin) => B.crearPin(pin);
-/** PIN de 6 números que no sea obvio (no 123456, 000000, ni la fecha de nacimiento). */
-export function pinDebil(pin, fechaNac = '') {
-  const p = String(pin);
-  if (!/^\d{6}$/.test(p)) return 'El PIN tiene que tener 6 números.';
-  if (/^(\d)\1{5}$/.test(p) || '0123456789'.includes(p) || '9876543210'.includes(p)) return 'Es muy fácil de adivinar: evitá números repetidos o seguidos.';
-  const f = String(fechaNac).replace(/-/g, '');
-  if (f && [f.slice(2), f.slice(6, 8) + f.slice(4, 6) + f.slice(2, 4)].includes(p)) return 'No uses tu fecha de nacimiento.';
-  return null;
-}
+export const ingresarConDni = (email, ticket, dni, recordar) => B.ingresarConDni(email, ticket, dni, recordar);
 
 /**
  * Alta del paciente después de validar el código: completa su perfil.

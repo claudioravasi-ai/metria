@@ -11,7 +11,7 @@
 
 export const CONFIG = {
   app: 'Metria',
-  version: '1.6.1',
+  version: '1.6.3',
   consultorio: 'Consultorio médico',     // nombre que ven los pacientes
   responsable: 'Responsable de la base: Dr. Claudio A. Ravasi',
   contacto: 'claudioravasi@outlook.com',    // correo para derechos de acceso, rectificación y supresión

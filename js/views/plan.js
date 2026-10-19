@@ -103,11 +103,11 @@ function tarjetaIA(ev, pacUid, medico) {
       const r = await analizarConIA(ev);
       cont.replaceChildren(resultadoIA(r, pacUid, medico));
     } catch (e) {
-      cont.replaceChildren(aviso('aviso', e.code === 'ia/sin-servidor' ? 'El análisis con IA se activa al configurar el servidor (Apps Script con la clave de Anthropic). En la demo no está disponible.' : `No se pudo completar el análisis: ${e.message}`));
+      cont.replaceChildren(aviso('aviso', e.code === 'ia/sin-servidor' ? 'El análisis con IA se activa al configurar el servidor (Apps Script con la clave de Anthropic o de DeepSeek). En la demo no está disponible.' : `No se pudo completar el análisis: ${e.message}`));
     } finally { btn.disabled = false; }
   };
   return tarjeta('Segunda opinión con IA', { icono: 'chispa', seccion: 'laboratorio' },
-    h('p.ayuda', 'Envía a Claude (Anthropic) la ficha SIN nombre, DNI, correo ni fecha de nacimiento: edad, sexo, medidas, enfermedades (incluidas las no reconocidas), medicación y análisis. Devuelve una revisión con evidencia reciente. Es apoyo: no reemplaza tu criterio.'),
+    h('p.ayuda', 'Envía a la IA que configuró el consultorio (Claude de Anthropic, EE. UU., o DeepSeek, China) la ficha SIN nombre, DNI, correo ni fecha de nacimiento: edad, sexo, medidas, enfermedades (incluidas las no reconocidas), medicación y análisis. Devuelve una revisión con evidencia reciente. Es apoyo: no reemplaza tu criterio.'),
     B.modo === 'demo' ? aviso('info', 'En la demo no hay servidor de IA configurado.') : null,
     h('div.botones', btn), cont);
 }
@@ -125,5 +125,5 @@ function resultadoIA(r, pacUid, medico) {
     h('div.botones', h('button.btn.btn--suave', { type: 'button', onclick: async () => {
       try { await guardarNota(pacUid, `Análisis con IA (revisar):\n${texto}`, medico); toast('Guardado en Notas', 'ok'); } catch { toast('No se pudo guardar', 'error'); }
     } }, icono('editar', { tam: 16 }), 'Guardar en notas')),
-    h('p.ayuda', `Generado por IA (${r.modelo || 'Claude'}). Verificá dosis y contraindicaciones con el prospecto vigente.`));
+    h('p.ayuda', `Generado por IA: ${r.proveedor === 'deepseek' ? 'DeepSeek, China' : 'Claude de Anthropic, EE. UU.'} (${r.modelo || 'modelo sin informar'}). Verificá dosis y contraindicaciones con el prospecto vigente.`));
 }

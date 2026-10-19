@@ -103,7 +103,7 @@ export function panelGlp1Medico({ ev, plan, tolerancia, pacUid, medico, paciente
       const f = GL.farmaco(st.farmaco);
       vista.replaceChildren(esquemaVisual(GL.esquema(st.farmaco, st.inicio), hoyISO(backend().ahora())),
         h('div.grid-2.grid-2--compacto', h('div', h('h4.sub', 'Cómo se aplica'), h('p', f.administracion)), h('div', h('h4.sub', 'Si se olvida una dosis'), h('p', f.olvido))),
-        h('p.ayuda', f.respuesta), f.novedad ? h('p.ayuda', f.novedad) : null);
+        h('p.ayuda', f.respuesta), ...(f.novedad ? [h('p.ayuda', f.novedad)] : []));
     };
     sel.onchange = () => { st.farmaco = sel.value; pintar(); };
     ini.onchange = () => { st.inicio = ini.value; pintar(); };

@@ -81,42 +81,31 @@ async function servidor(accion, datos) {
     const r = await fetch(CFG.codigosURL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ accion, ...datos }) });
     j = await r.json();
   } catch { throw Object.assign(new Error('red'), { code: 'auth/network-request-failed' }); }
-  if (!j.ok) throw Object.assign(new Error(j.error || 'error'), { code: String(j.error).startsWith('pin-') ? `pin/${j.error.slice(4)}` : `codigo/${j.error || 'error'}` });
+  if (!j.ok) throw Object.assign(new Error(j.error || 'error'), { code: /^(pin|dni)-/.test(String(j.error)) ? String(j.error).replace('-', '/') : `codigo/${j.error || 'error'}` });
   return j;
 }
 export const pedirCodigo = (email) => servidor('pedir', { email: String(email).trim().toLowerCase() });
-const marcarCrearPin = () => { try { sessionStorage.setItem('metria-crear-pin', '1'); } catch { /* */ } };
 async function entrarConToken(token, recordar) {
   await A.setPersistence(auth, recordar ? A.browserLocalPersistence : A.browserSessionPersistence);
   await A.signInWithCustomToken(auth, token);
 }
-/** Código del correo (1.er factor). Si el paciente ya tiene PIN, el servidor no entrega el token hasta el PIN (2.º factor). */
+/** Código del correo (1.er paso). Si el paciente ya tiene ficha, el servidor no entrega el token hasta el DNI (2.º paso). */
 export async function ingresarConCodigo(email, codigo, recordar = false) {
   const r = await servidor('verificar', { email: String(email).trim().toLowerCase(), codigo: String(codigo).replace(/\D/g, '') });
-  if (r.pin === 'pedir') return { pin: 'pedir', ticket: r.ticket };
-  marcarCrearPin();
+  if (r.dni === 'pedir') return { dni: 'pedir', ticket: r.ticket };
   await entrarConToken(r.token, recordar);
-  return { pin: 'crear' };
+  return {};
 }
-export async function ingresarConPin(email, ticket, pin, recordar = false) {
-  const r = await servidor('pin', { email: String(email).trim().toLowerCase(), ticket, pin: String(pin) });
+export async function ingresarConDni(email, ticket, dni, recordar = false) {
+  const r = await servidor('dni', { email: String(email).trim().toLowerCase(), ticket, dni: String(dni).replace(/\D/g, '') });
   await entrarConToken(r.token, recordar);
-}
-export async function restablecerPin(email, ticket, dni, recordar = false) {
-  const r = await servidor('resetPin', { email: String(email).trim().toLowerCase(), ticket, dni: String(dni).replace(/\D/g, '') });
-  marcarCrearPin();
-  await entrarConToken(r.token, recordar);
-}
-export async function crearPin(pin) {
-  const idToken = await auth.currentUser.getIdToken();
-  await servidor('crearPin', { idToken, pin: String(pin) });
 }
 /** Segunda opinión con IA: el servidor verifica que quien pide sea un médico autorizado. */
 export async function analizarIA(datos) {
   if (!CFG.codigosURL) throw Object.assign(new Error('sin servidor'), { code: 'ia/sin-servidor' });
   const idToken = await auth.currentUser.getIdToken();
   try { return (await servidor('ia', { idToken, datos })).resultado; }
-  catch (e) { throw Object.assign(new Error(e.code === 'codigo/no-autorizado' ? 'tu cuenta no está autorizada' : e.code === 'codigo/ia-sin-clave' ? 'falta la clave de Anthropic en el servidor' : 'el servidor no respondió'), { code: e.code }); }
+  catch (e) { throw Object.assign(new Error(e.code === 'codigo/no-autorizado' ? 'tu cuenta no está autorizada' : e.code === 'codigo/ia-sin-clave' ? 'falta la clave de la IA (Anthropic o DeepSeek) en el servidor' : 'el servidor no respondió'), { code: e.code }); }
 }
 /** Correo del turno de endoscopia, de las órdenes o de la reprogramación.
  *  El servidor solo lo manda al correo del paciente dueño del turno (lo comprueba en la base). */
