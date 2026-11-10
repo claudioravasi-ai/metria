@@ -144,7 +144,9 @@ export function barras({ formato = (v) => Math.round(v).toLocaleString('es-AR'),
         for (const it of items) {
           const fill = h('div.barra-fill');
           const val = h('span.barra-val.num');
-          const fila = h('button.barra', { type: 'button', onclick: () => it.onclick?.() },
+          // 10-11: sin acción no es botón (antes parecía tocable y no hacía nada)
+          const fila = it.onclick ? h('button.barra', { type: 'button', onclick: () => it.onclick() }) : h('div.barra.barra--fija');
+          fila.append(
             h('div.barra-txt', h('strong', it.nombre), it.desc ? h('small', it.desc) : null),
             h('div.barra-pista', fill), val);
           filas.set(it.id, { fila, fill, val, s: seguidor((v) => { fill.style.width = `${clamp(v / M, 0, 1) * 100}%`; val.textContent = `${formato(v)}${unidad ? ' ' + unidad : ''}`; }) });

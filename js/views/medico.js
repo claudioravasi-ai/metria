@@ -201,7 +201,7 @@ export function appMedico(perfil, { onSalir }) {
         kpi('pacientes', 'Pacientes', filas.length, 'registrados', () => ir('pacientes')),
         kpi('endoscopia', 'Prioridad urgente o alta', urgentes, 'VEDA / VCC pendientes', () => { S.filtro = 'prioridad'; ir('pacientes'); }),
         kpi('estudios', 'Riesgo endoscópico alto', altos, 'según el último informe', () => { S.filtro = 'riesgoEndo'; ir('pacientes'); }),
-        kpi('privacidad', 'Pedidos de pacientes', pend.length, 'acceso, rectificación, baja', null)),
+        kpi('privacidad', 'Pedidos de pacientes', pend.length, 'acceso, rectificación, baja', () => [...document.querySelectorAll('.card-cab h3')].find((x) => x.textContent.startsWith('Pedidos de los pacientes'))?.closest('.card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))),
       h('div.grid-2',
         tarjeta('Prioridad endoscópica', { icono: 'endoscopio', seccion: 'endoscopia' }, dist('_prio', ['1', '2', '3', '0'],
           { 1: 'Urgente (≤ 2 sem.)', 2: 'Alta (≤ 6 sem.)', 3: 'Programada (≤ 1 año)', 0: 'Sin prioridad' },

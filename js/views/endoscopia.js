@@ -463,8 +463,9 @@ function pasoPre(ctx, ir, cfg) {
         h('ul', ...ev.faltan.filter((i) => i.estado !== 'sin-responder').map((i) => h('li', h('strong', i.nombre), ` — ${i.texto}`))),
         !cfg.rscSedacion ? h('p.ayuda', '¿Solo te indicaron una rectoscopia (rectosigmoidoscopia)? Se hace sin sedación y no necesita prequirúrgico: ',
           h('button.btn-link', { type: 'button', onclick: async () => { W.soloRsc = true; W.tipo = 'rsc'; W.libre = null; try { await D.guardarEndoPaciente(ctx.uid, { pre }); } catch { /* */ } ir('turno'); } }, 'elegir turno de rectoscopia')) : null,
-        ev.pedir.length ? h('div.botones',
-          h('button.btn.btn--primario', { type: 'button', onclick: guardarY('ordenes') }, icono('texto', { tam: 16 }), ev.pedir.length === 1 ? 'Generar mi orden' : `Generar mis ${ev.pedir.length} órdenes`),
+        // 10-11: «Guardar y volver después» siempre que ya respondió los tres (antes, con el apto negado o la fecha a medias, no había cómo salir)
+        !ev.faltan.some((i) => i.estado === 'sin-responder') ? h('div.botones',
+          ev.pedir.length ? h('button.btn.btn--primario', { type: 'button', onclick: guardarY('ordenes') }, icono('texto', { tam: 16 }), ev.pedir.length === 1 ? 'Generar mi orden' : `Generar mis ${ev.pedir.length} órdenes`) : null,
           h('button.btn.btn--suave', { type: 'button', onclick: guardarY('inicio', 'Guardamos tus respuestas. Volvé cuando tengas todo.') }, 'Guardar y volver después')) : null));
   };
   const guardarY = (paso, msg) => async () => {
@@ -478,9 +479,9 @@ function pasoPre(ctx, ir, cfg) {
     // (antes se recreaba con cada tecla, el año quedaba en «0002» y la pantalla se rompía).
     const pintar = () => {
       const est = E.evaluarPrequirurgico(pre, B().ahora(), cfg.validez).items.find((i) => i.id === r.id);
-      estado.replaceChildren(chip(est.texto, { ok: 'ok', falta: 'peligro', vencido: 'peligro', 'no-apto': 'peligro', incompleto: 'aviso', 'sin-responder': 'neutro' }[est.estado], est.estado === 'ok' ? 'okCirculo' : 'reloj'));
+      estado.replaceChildren(chip(est.texto, { ok: 'ok', falta: 'peligro', vencido: 'peligro', 'no-apto': 'peligro', 'sin-informe': 'aviso', incompleto: 'aviso', 'sin-responder': 'neutro' }[est.estado], est.estado === 'ok' ? 'okCirculo' : 'reloj'));
       caja.classList.toggle('req--ok', est.estado === 'ok');
-      caja.classList.toggle('req--falta', ['falta', 'vencido', 'no-apto'].includes(est.estado));
+      caja.classList.toggle('req--falta', ['falta', 'vencido', 'no-apto', 'sin-informe'].includes(est.estado));
     };
     const alCambiar = () => { pintar(); pintarResumen(); };
     // Fecha completa y razonable (año de 4 cifras desde 1990); mientras se escribe, queda sin fecha
@@ -600,11 +601,20 @@ function pasoDocs(ctx, ir, cfg) {
       preparacion: docs.pasos.map((p) => `${p.cuando}: ${p.que.join(' ')}`),
     }).then((r) => { if (r) { W.ia = r; ctx.render(); } });
   }
-  const firma = panelFirma({ onCambio: () => {}, nombre: `${perfil.nombre} ${perfil.apellido}`, teclado: true });
-  const leido = h('input', { type: 'checkbox' });
-  const acl = h('input', { type: 'text', value: `${perfil.nombre} ${perfil.apellido}`, maxlength: 80, id: 'endo-acl' });
+  // 10-11-2026: el botón queda apagado y dice qué falta hasta que marca la conformidad, firma y aclara
+  let revisar = () => {};
+  const firma = panelFirma({ onCambio: () => revisar(), nombre: `${perfil.nombre} ${perfil.apellido}`, teclado: true });
+  const leido = h('input', { type: 'checkbox', onchange: () => revisar() });
+  const acl = h('input', { type: 'text', value: `${perfil.nombre} ${perfil.apellido}`, maxlength: 80, id: 'endo-acl', oninput: () => revisar() });
   const err = h('div.form-error', { role: 'alert' });
-  const btn = h('button.btn.btn--primario.btn--grande.btn--brillo', { type: 'button' }, icono('ok', { tam: 18 }), 'Confirmar mi turno');
+  const falta = h('p.ayuda.confirmar-falta', { 'aria-live': 'polite' });
+  const btn = h('button.btn.btn--primario.btn--grande.btn--brillo', { type: 'button', disabled: true }, icono('ok', { tam: 18 }), 'Confirmar mi turno');
+  revisar = () => {
+    const f = [!leido.checked && 'marcar que leíste y entendiste el consentimiento', firma.vacia() && 'tu firma', !acl.value.trim() && 'tu aclaración (nombre y apellido)'].filter(Boolean);
+    if (btn.textContent !== 'Reservando…') btn.disabled = f.length > 0;
+    falta.textContent = f.length ? `Para confirmar falta: ${f.join(', ')}.` : '';
+    if (!f.length) err.textContent = '';
+  };
   btn.onclick = async () => {
     err.textContent = '';
     if (!leido.checked) { err.textContent = 'Marcá que leíste y entendiste el consentimiento.'; return; }
@@ -625,6 +635,7 @@ function pasoDocs(ctx, ir, cfg) {
       err.textContent = 'No se pudo reservar. Revisá la conexión e intentá de nuevo.'; btn.disabled = false; btn.textContent = 'Confirmar mi turno';
     }
   };
+  revisar();
   const e = E.ESTUDIOS[W.tipo];
   return h('div.endo-docs-paso',
     h('div.turno-elegido', { style: { '--c1': e.c1, '--c2': e.c2 } }, icono('calendario', { tam: 22 }), h('div', h('strong', `${e.corto} · ${E.fechaLarga(W.fecha)} · ${E.hora(W.libre.hora)} h`), h('small', `Presentate a las ${docs.presentarse}`)),
@@ -635,7 +646,7 @@ function pasoDocs(ctx, ir, cfg) {
       h('label.check.check--legal', leido, h('span', 'Leí y entendí esta información, pude hacer preguntas y presto mi consentimiento para el estudio.')),
       h('div.campo', h('label', 'Tu firma'), firma.el),
       h('div.campo', h('label', { for: 'endo-acl' }, 'Aclaración'), acl),
-      err, h('div.botones.endo-nav', h('button.btn.btn--suave', { type: 'button', onclick: () => ir('turno') }, icono('flechaIzq', { tam: 16 }), 'Turno'), btn)));
+      err, falta, h('div.botones.endo-nav', h('button.btn.btn--suave', { type: 'button', onclick: () => ir('turno') }, icono('flechaIzq', { tam: 16 }), 'Turno'), btn)));
 }
 
 /* ---------- Ticket recién creado ---------- */

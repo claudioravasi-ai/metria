@@ -134,14 +134,15 @@ export function evaluarPrequirurgico(pre = {}, ahora = Date.now(), validez = VAL
     const hecho = new Date(`${x.fecha}T12:00:00`).getTime();
     if (hecho > ahora + MS_DIA) return { ...r, estado: 'incompleto', texto: 'La fecha no puede ser futura', dias };
     const vence = hecho + dias * MS_DIA;
-    if (r.id === 'ecg' && !x.informe) return { ...r, estado: 'incompleto', texto: 'Falta la lectura del cardiólogo', dias, vence };
+    // 10-11: sin lectura del cardiólogo se le da la orden (ECG con informe); antes quedaba trabado sin botón
+    if (r.id === 'ecg' && !x.informe) return { ...r, estado: 'sin-informe', texto: 'Falta la lectura del cardiólogo', dias, vence };
     if (r.id === 'anestesia' && x.apto === false) return { ...r, estado: 'no-apto', texto: 'El anestesiólogo no dio el apto', dias, vence };
     if (vence < ahora) return { ...r, estado: 'vencido', texto: `Venció: tiene más de ${dias} días`, dias, vence };
     return { ...r, estado: 'ok', texto: `Vigente hasta el ${new Date(vence).toLocaleDateString('es-AR')}`, dias, vence };
   });
   const faltan = items.filter((i) => i.estado !== 'ok');
   const venceTodo = items.every((i) => i.vence) ? Math.min(...items.map((i) => i.vence)) : null;
-  return { items, faltan, completo: !faltan.length, venceTodo, pedir: items.filter((i) => ['falta', 'vencido'].includes(i.estado)) };
+  return { items, faltan, completo: !faltan.length, venceTodo, pedir: items.filter((i) => ['falta', 'vencido', 'sin-informe'].includes(i.estado)) };
 }
 
 /* ---------- Cupos ---------- */
