@@ -14,7 +14,7 @@ import { icono } from '../core/iconos.js';
 import { heroe, tarjeta, chip, aviso, modal, toast, confirmar, fecha, fechaHora, duracion, progreso, vacio, cargando } from '../core/ui.js';
 import { CONFIG } from '../config.js';
 import { backend, estadoEstudio, traerEstudio, marcarDescarga, subirEstudio, borrarEstudio } from '../data/servicio.js';
-import { TIPOS, tipoDe, tamanoLegible, generarBosquejo, mostrarEnVisor, descargarBlob, ACEPTADOS } from '../data/archivos.js';
+import { TIPOS, tipoDe, tamanoLegible, generarBosquejo, mostrarEnVisor, descargarBlob, ACEPTADOS, achicarImagen } from '../data/archivos.js';
 
 export const CATEGORIAS = [
   ['laboratorio', 'Laboratorio'], ['imagenes', 'Imágenes'], ['cardiologia', 'Cardiología'], ['informe', 'Informe médico'],
@@ -132,11 +132,20 @@ export function vistaEstudiosPaciente({ uid, estudios }) {
 const paso = (ic, t, d) => h('div.paso-est', h('span', icono(ic, { tam: 20 })), h('strong', t), h('small', d));
 
 /* ---------- Vista del médico ---------- */
+/* 10-11-2026 · La zona de subida y su cola se arman UNA vez por paciente y se reusan: la ficha se
+   redibuja sola cada vez que llega un estudio, y antes, al subir el primero de varios archivos, los
+   demás desaparecían de la cola sin subirse. */
+const SUBIDAS = new Map();
 export function panelEstudiosMedico({ pacUid, paciente, estudios, verificado }) {
   const lista = Object.entries(estudios || {}).sort((a, b) => (b[1].subidoEn || 0) - (a[1].subidoEn || 0));
+  if (!SUBIDAS.has(pacUid)) { SUBIDAS.clear(); SUBIDAS.set(pacUid, crearSubida(pacUid)); }
+  const { zona, cola } = SUBIDAS.get(pacUid);
+  return panelMedico({ pacUid, paciente, lista, verificado, zona, cola });
+}
+function crearSubida(pacUid) {
   const zona = h('label.zona-subida', { tabindex: 0 },
     icono('subir', { tam: 34 }), h('strong', 'Arrastrá los archivos o tocá para elegir'),
-    h('small', `PDF, imágenes, DICOM, video, audio, texto, Word, Excel o ZIP · hasta ${CONFIG.tamanoMaximoMB} MB cada uno`));
+    h('small', `PDF, imágenes, DICOM, video, audio, texto, Word, Excel o ZIP · hasta ${CONFIG.tamanoMaximoMB} MB cada uno · las fotos se achican solas`));
   const input = h('input', { type: 'file', multiple: true, accept: ACEPTADOS, hidden: true });
   zona.append(input);
   const cola = h('div.cola');
@@ -160,15 +169,23 @@ export function panelEstudiosMedico({ pacUid, paciente, estudios, verificado }) 
     generarBosquejo(f).then((b) => { bosquejo = b; if (b) prev.replaceChildren(h('img', { src: b, alt: '' })); });
     const btn = h('button.btn.btn--primario', { type: 'button' }, icono('subir', { tam: 16 }), 'Subir');
     const quitar = h('button.btn-icono', { type: 'button', 'aria-label': 'Quitar de la cola' }, icono('x', { tam: 16 }));
+    // Las fotos se achican solas antes de subir (más livianas, se ven igual en el teléfono).
+    const detalle = h('small', `${TIPOS[tipo].nombre} · ${tamanoLegible(f.size)}`);
+    let arch = f, listo = Promise.resolve();
+    if (tipo === 'imagen') {
+      detalle.textContent = `${TIPOS[tipo].nombre} · ${tamanoLegible(f.size)} · achicando…`;
+      listo = achicarImagen(f).then((g) => { arch = g; detalle.textContent = g !== f ? `${TIPOS[tipo].nombre} · ${tamanoLegible(f.size)} → ${tamanoLegible(g.size)} (liviana)` : `${TIPOS[tipo].nombre} · ${tamanoLegible(f.size)}`; });
+    }
     const fila = h('div.cola-item', prev,
-      h('div.cola-campos', h('div.cola-nombre', h('strong', f.name), h('small', `${TIPOS[tipo].nombre} · ${tamanoLegible(f.size)}`)),
+      h('div.cola-campos', h('div.cola-nombre', h('strong', f.name), detalle),
         h('div.cola-grid', titulo, cat, fch, nota), bar.el),
       h('div.cola-acc', btn, quitar));
     quitar.onclick = () => fila.remove();
     btn.onclick = async () => {
       btn.disabled = true; quitar.disabled = true;
       try {
-        await subirEstudio(pacUid, f, { titulo: titulo.value, categoria: cat.value, fechaEstudio: fch.value, nota: nota.value, bosquejo }, bar.set);
+        await listo;
+        await subirEstudio(pacUid, arch, { titulo: titulo.value, categoria: cat.value, fechaEstudio: fch.value, nota: nota.value, bosquejo }, bar.set);
         toast(`«${titulo.value}» subido. El paciente ya lo ve en su app.`, 'ok');
         fila.remove();
       } catch (e) {
@@ -179,7 +196,9 @@ export function panelEstudiosMedico({ pacUid, paciente, estudios, verificado }) 
     };
     cola.append(fila);
   }
-
+  return { zona, cola };
+}
+function panelMedico({ pacUid, paciente, lista, verificado, zona, cola }) {
   return h('div.seccion',
     heroe('estudios', 'Estudios', `Cargá estudios para ${paciente}. El paciente ve un bosquejo y los retira cuando quiere.`),
     verificado ? null : aviso('aviso', h('span', h('strong', 'Identidad sin constatar. '), 'Antes de cargar estudios, verificá el DNI del paciente en la consulta (botón «Verificar identidad» arriba). Así te asegurás de que la cuenta es de esa persona.')),

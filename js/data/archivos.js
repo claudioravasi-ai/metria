@@ -36,6 +36,24 @@ export function tipoDe(mime = '', nombre = '') {
   return 'otro';
 }
 
+/* 10-11-2026 · Fotos livianas (pedido de Claudio): antes de subir, las fotos (JPG, PNG, WEBP) se
+   achican a 1600 px de lado y calidad 0,72. Para ver en el teléfono alcanza y casi no ocupa lugar en
+   la base. Si no se puede (HEIC, GIF animado) o no achica, se sube el original. */
+export async function achicarImagen(f, { lado = 1600, calidad = 0.72 } = {}) {
+  if (!/^image\/(jpeg|png|webp)$/.test(f.type || '')) return f;
+  try {
+    const bmp = await createImageBitmap(f);
+    const k = Math.min(1, lado / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+    bmp.close && bmp.close();
+    const b = await new Promise((ok) => c.toBlob(ok, 'image/jpeg', calidad));
+    if (!b || b.size >= f.size) return f;
+    return new File([b], f.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: Date.now() });
+  } catch (e) { return f; }
+}
+
 export const tamanoLegible = (b) => (b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1).replace('.', ',')} MB`);
 
 /* ---------- pdf.js a pedido ---------- */
