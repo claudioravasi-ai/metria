@@ -254,6 +254,19 @@ export async function encolarEnvio(datos) {
   const u = B().usuario();
   return B().agregar('enviosEndo', { ...JSON.parse(JSON.stringify(resto)), estado: 'pendiente', creado: B().TS, por: u?.paciente ? 'paciente' : 'consultorio' });
 }
+/** Pendientes sin repetidos: si el mismo paciente pidió dos veces lo mismo (mismo tipo y turno),
+ *  queda el más nuevo y los anteriores van en «gemelos» (se cierran junto con él). 10-11-2026 */
+export function pendientesUnicos(envios) {
+  const grupos = new Map();
+  Object.entries(envios || {}).filter(([, e]) => e?.estado === 'pendiente')
+    .sort((a, b) => (b[1].creado || 0) - (a[1].creado || 0))
+    .forEach(([id, e]) => {
+      const k = [e.pac || id, e.tipo, e.turno || ''].join('|');
+      if (grupos.has(k)) grupos.get(k).gemelos.push(id); else grupos.set(k, { id, e, gemelos: [] });
+    });
+  return [...grupos.values()];
+}
+export const cerrarGemelos = (ids) => ids.length ? B().actualizar('', Object.fromEntries(ids.flatMap((g) => [[`enviosEndo/${g}/estado`, 'descartado'], [`enviosEndo/${g}/cerrado`, B().TS]]))) : null;
 export const guardarEdicionEnvio = (id, secciones) => B().actualizar('', { [`enviosEndo/${id}/secciones`]: secciones, [`enviosEndo/${id}/editado`]: B().TS });
 export const descartarEnvio = (id) => B().actualizar('', { [`enviosEndo/${id}/estado`]: 'descartado', [`enviosEndo/${id}/cerrado`]: B().TS });
 export async function marcarEnviado(id, envio) {
@@ -267,7 +280,11 @@ export async function marcarEnviado(id, envio) {
 
 /* ---------- Correos e IA (servidor de Apps Script; en la demo se muestran en pantalla) ---------- */
 export async function enviarCorreo(datos) {
-  if (B().modo === 'demo' || !B().correoEndo) return { demo: true };
+  if (B().modo === 'demo' || !B().correoEndo) {
+    // En la demo hace de servidor: las órdenes enviadas pasan a «enviado» (en producción lo hace el Apps Script)
+    if (datos.tipo === 'ordenes' && datos.envio && B().servidorMarcarEnvio) await B().servidorMarcarEnvio(datos.envio).catch(() => {});
+    return { demo: true };
+  }
   return B().correoEndo(datos);
 }
 export async function resumenIA(datos) {

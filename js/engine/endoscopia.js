@@ -434,9 +434,26 @@ export function ordenes(faltan, { tipo } = {}) {
   const O = {
     analitica: { titulo: 'Laboratorio prequirúrgico', rp: ['Hemograma completo con recuento de plaquetas', 'Glucemia en ayunas', 'Uremia', 'Coagulograma: tiempo de protrombina (TP) con RIN y KPTT'], dx },
     ecg: { titulo: 'Electrocardiograma', rp: ['Electrocardiograma de 12 derivaciones con informe y lectura cardiológica'], dx },
-    anestesia: { titulo: 'Interconsulta con Anestesiología', rp: ['Interconsulta con Anestesiología: valoración preanestésica (riesgo ASA) para sedación endovenosa'], dx },
+    anestesia: { titulo: 'Interconsulta con Anestesiología', rp: ['Valoración anestésica prequirúrgica para endoscopia digestiva bajo sedación anestésica'], dx },
   };
   return faltan.map((id) => ({ id, ...O[id] })).filter((o) => o.titulo);
+}
+
+/* ---------- Receta (10-11-2026): qué es, dónde se hace y qué tener en cuenta en cada orden ----------
+   El mismo texto está en el Apps Script (recetaHTML_ de Codigos.gs y Metria-completo.gs): cambiar los dos. */
+export const RECETA_INFO = {
+  analitica: { tipo: 'Análisis de sangre', donde: 'Laboratorio de análisis clínicos', color: '#7c3aed',
+    tips: ['Ayuno de 8 a 12 horas (podés tomar agua).', 'Si tomás anticoagulantes o antiagregantes, avisalo al hacerte la extracción.', 'Pedí los resultados impresos o en PDF y cargá la fecha en Metria.'] },
+  ecg: { tipo: 'Cardiología', donde: 'Consultorio de cardiología o centro con electrocardiógrafo', color: '#e11d48',
+    tips: ['Pedí que un cardiólogo lo lea y lo informe por escrito: sin informe no sirve para la sedación.', 'Llevá tus estudios cardiológicos anteriores, si tenés.', 'Cargá la fecha del electrocardiograma en Metria cuando lo tengas.'] },
+  anestesia: { tipo: 'Anestesiología', donde: 'Consultorio de anestesiología', color: '#0e7490',
+    tips: ['Llevá esta orden, tus análisis y el electrocardiograma con su informe.', 'Llevá la lista de los medicamentos que tomás, con las dosis.', 'Pedí el apto por escrito y cargá la fecha en Metria.'] },
+};
+/** Qué requisito es una orden (por su id o, en los envíos guardados, por su título). */
+export function idDeOrden(o) {
+  if (RECETA_INFO[o?.id]) return o.id;
+  const t = String(o?.titulo || '');
+  return /laborat|sangre/i.test(t) ? 'analitica' : /electro|ECG/i.test(t) ? 'ecg' : /aneste/i.test(t) ? 'anestesia' : null;
 }
 
 /* ---------- Evento de calendario (.ics) ---------- */

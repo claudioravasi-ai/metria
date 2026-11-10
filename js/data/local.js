@@ -300,6 +300,13 @@ export function nuevaClave() {
   for (const b of r) s += ALFA[b % 64];
   return s;
 }
+/** Hace de servidor (Apps Script) en la demo: marca enviado un envío de órdenes recién mandado. */
+export async function servidorMarcarEnvio(id) {
+  const e = obtener(`enviosEndo/${id}`);
+  if (!e || e.tipo !== 'ordenes' || e.estado !== 'pendiente' || e.pac !== sesion?.uid) return;
+  poner(`enviosEndo/${id}/estado`, 'enviado'); poner(`enviosEndo/${id}/cerrado`, ahora());
+  await confirmar([`enviosEndo/${id}/estado`, `enviosEndo/${id}/cerrado`]);
+}
 export async function agregar(ruta, valor) {
   const k = nuevaClave();
   await escribir(`${ruta}/${k}`, valor);

@@ -49,7 +49,7 @@ export function appMedico(perfil, { onSalir }) {
 
   const items = () => [
     { id: 'panel' }, { id: 'pacientes', badge: null },
-    { id: 'endoscopia', badge: (Object.values(S.endo.turnos).flatMap((l) => Object.values(l || {})).filter((t) => t.estado === 'suspendido').length + Object.values(S.endo.envios || {}).filter((e) => e.estado === 'pendiente').length) || null },
+    { id: 'endoscopia', badge: (Object.values(S.endo.turnos).flatMap((l) => Object.values(l || {})).filter((t) => t.estado === 'suspendido').length + DE.pendientesUnicos(S.endo.envios).length) || null },
     { id: 'seguimiento', badge: (() => { const b = bandejaSeg(S.seguimiento, hoyISO(B.ahora())); return b.ap.filter((x) => x.vencido).length + b.vencidos.length + b.inmediatos.length || null; })() },
     ...(perfil.titular ? [{ id: 'medicos', badge: Object.entries(S.estados).filter(([uid, e]) => e === 'pendiente' && uid !== perfil.uid).length || null }] : []),
     { id: 'privacidad', nombre: 'Mi cuenta' }, { id: 'ayuda' },
