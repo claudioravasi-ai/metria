@@ -104,6 +104,7 @@ export const SECCIONES = {
   pacientes: { nombre: 'Pacientes', icono: 'usuarios', c1: '#6366f1', c2: '#06b6d4' },
   panel: { nombre: 'Panel', icono: 'grafico', c1: '#7c3aed', c2: '#ec4899' },
   medicos: { nombre: 'Profesionales', icono: 'estetoscopio', c1: '#0891b2', c2: '#22c55e' },
+  historial: { nombre: 'Historial', icono: 'reloj', c1: '#334155', c2: '#6366f1' },
 };
 
 export function estiloSeccion(id) {

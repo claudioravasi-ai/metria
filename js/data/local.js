@@ -131,6 +131,12 @@ function rol() {
 function puedeLeer(ruta) {
   const [a, b, c] = partes(ruta);
   if (a === 'estadoTurno') return !!b; // estado público del turno (QR): se lee con el código, sin sesión
+  // Estudio compartido con otro médico: lo lee cualquiera que tenga el enlace, mientras esté listo y no venza
+  if (a === 'compartidos' || a === 'compartidosArchivos') {
+    const cc = arbol.compartidos?.[b];
+    if (!b || !cc) return false;
+    return (cc.listo === true && cc.vence > ahora()) || (!!sesion && cc.pac === sesion.uid);
+  }
   const r = rol();
   if (!sesion) return false;
   const med = r.tipo === 'medico' && r.aprobado;
@@ -143,7 +149,9 @@ function puedeLeer(ruta) {
     case 'indice': case 'estudiosVenc': case 'solicitudesTodas': return med;
     case 'pacientes': case 'estudios': case 'auditoria': case 'verificados': case 'solicitudes':
       return b === sesion.uid || med;
+    case 'compartidosPac': return b === sesion.uid || r.titular;
     case 'evaluaciones': case 'indiceDni': return med;
+    case 'historial': return r.titular; // historial general: solo el coordinador
     case 'seguimiento': return b === sesion.uid || med;
     case 'estudiosArchivos': {
       if (med) return true;
@@ -151,6 +159,7 @@ function puedeLeer(ruta) {
       const meta = arbol.estudios?.[b]?.[c];
       if (!meta) return false;
       if (meta.subidoEn + RETENCION <= ahora()) return false;
+      if ((meta.descargas || 0) >= CONFIG.maxDescargas) return false;
       return !meta.descargadoEn || meta.descargadoEn + VENCE_DESCARGA > ahora();
     }
     default: return false;
@@ -159,6 +168,8 @@ function puedeLeer(ruta) {
 
 function puedeEscribir(ruta, valor) {
   const [a, b, c, d] = partes(ruta);
+  // Constancia de apertura del estudio compartido (el médico que lo abre no tiene cuenta)
+  if (a === 'compartidos' && c === 'vistas' && d) { const cc = arbol.compartidos?.[b]; return !!cc && cc.listo === true && cc.vence > ahora() && !cc.vistas?.[d] && typeof valor === 'number'; }
   const r = rol();
   if (!sesion) return false;
   const med = r.tipo === 'medico' && r.aprobado;
@@ -198,13 +209,23 @@ function puedeEscribir(ruta, valor) {
     case 'verificados': case 'evaluaciones': case 'seguimiento': return med;
     case 'indiceDni': return med || (valor === sesion.uid && !arbol.indiceDni?.[b]); // el paciente indexa su DNI al darse de alta
     case 'auditoria': return propio || med;
+    // historial general: cualquiera con sesión AGREGA su propio renglón; nadie lo cambia ni lo borra
+    case 'historial': return !!b && !c && valor !== null && !arbol.historial?.[b] && valor.quien === sesion.uid && typeof valor.accion === 'string';
     case 'solicitudes': return propio || med;
+    case 'compartidos': {
+      const cc = arbol.compartidos?.[b];
+      if (!cc) return !c && !!valor && valor.pac === sesion.uid && !!arbol.estudios?.[sesion.uid]?.[valor.estudio] && valor.vence <= ahora() + 72 * 3600000 + 60000;
+      return cc.pac === sesion.uid || (r.titular && valor === null);
+    }
+    case 'compartidosArchivos': return arbol.compartidos?.[b]?.pac === sesion.uid || (r.titular && valor === null);
+    case 'compartidosPac': return propio || (r.titular && valor === null);
     case 'estudios': {
       if (med) return true;
       // El paciente solo puede marcar la descarga (una vez) o borrar lo vencido
       const meta = arbol.estudios?.[b]?.[c];
       if (!propio || !meta) return false;
       if (d === 'descargadoEn') return !meta.descargadoEn;
+      if (d === 'descargas') return valor === (meta.descargas || 0) + 1 && valor <= CONFIG.maxDescargas;
       if (!d && valor === null) return vencido(meta);
       return false;
     }
@@ -217,7 +238,7 @@ function puedeEscribir(ruta, valor) {
 export function vencido(meta) {
   if (!meta) return true;
   const t = ahora();
-  return (meta.descargadoEn && meta.descargadoEn + VENCE_DESCARGA <= t) || meta.subidoEn + RETENCION <= t;
+  return (meta.descargadoEn && meta.descargadoEn + VENCE_DESCARGA <= t) || meta.subidoEn + RETENCION <= t || (meta.descargas || 0) >= CONFIG.maxDescargas;
 }
 
 const denegado = (ruta) => Object.assign(new Error(`Permiso denegado: ${partes(ruta)[0]}`), { code: 'PERMISSION_DENIED' });
@@ -317,6 +338,11 @@ export function escuchar(ruta, cb) {
   oyentes.get(ruta).add(cb);
   queueMicrotask(() => { try { cb(puedeLeer(ruta) ? clonar(obtener(ruta)) : null); } catch (e) { console.error(e); } });
   return () => oyentes.get(ruta)?.delete(cb);
+}
+
+/** Igual que en Firebase: solo las últimas `n` claves. */
+export function escucharUltimos(ruta, n, cb) {
+  return escuchar(ruta, (v) => cb(v ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1)).slice(-n)) : v));
 }
 
 /** Igual que en Firebase: solo las claves desde `desde` (fechas futuras). */

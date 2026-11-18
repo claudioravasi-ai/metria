@@ -48,6 +48,12 @@ export function escuchar(ruta, cb) {
   return D.onValue(r(ruta), (s) => cb(s.val()), (e) => { console.warn('Sin permiso para', ruta.split('/')[0], e.code); cb(null); });
 }
 
+/** Escucha solo las últimas `n` claves (las claves de push van en orden de llegada). */
+export function escucharUltimos(ruta, n, cb) {
+  const q = D.query(r(ruta), D.orderByKey(), D.limitToLast(n));
+  return D.onValue(q, (s) => cb(s.val()), (e) => { console.warn('Sin permiso para', ruta.split('/')[0], e.code); cb(null); });
+}
+
 /** Escucha solo las claves desde `desde` en adelante (p. ej. fechas futuras): baja menos datos. */
 export function escucharDesde(ruta, desde, cb) {
   const q = D.query(r(ruta), D.orderByKey(), D.startAt(String(desde)));

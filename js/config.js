@@ -11,7 +11,7 @@
 
 export const CONFIG = {
   app: 'Metria',
-  version: '1.6.6',
+  version: '1.6.7',
   consultorio: 'Consultorio médico',     // nombre que ven los pacientes
   responsable: 'Responsable de la base: Dr. Claudio A. Ravasi',
   contacto: 'claudioravasi@outlook.com',    // correo para derechos de acceso, rectificación y supresión
@@ -38,7 +38,9 @@ export const CONFIG = {
 
   // Estudios
   horasTrasDescarga: 72,          // se borran 3 días después de la primera descarga
-  diasRetencionMaxima: 90,        // si nunca se descargan, se borran igual a los 90 días
+  diasRetencionMaxima: 30,        // si nunca se abren, se borran igual a los 30 días (Claudio, 18-11-2026; antes 90)
+  maxDescargas: 3,                // a la 3.ª descarga el estudio vence y se borra (18-11-2026)
+  horasCompartir: 72,             // un enlace para otro médico dura como máximo 72 h (y nunca más que el estudio)
   tamanoMaximoMB: 25,
   minutosInactividad: 15,         // cierre de sesión automático
   minutosCodigo: 10,              // vigencia del código de ingreso de los pacientes

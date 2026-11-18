@@ -876,6 +876,10 @@ input.rango-num { width: 76px; min-height: 34px; padding: 4px 8px; text-align: r
 .auditoria small { color: var(--text-2); font-size: 12px; }
 .auditoria time { color: var(--text-3); font-size: 12px; white-space: nowrap; font-family: var(--fn); }
 .aud-ico { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; color: var(--c1); background: color-mix(in srgb, var(--c1) 12%, transparent); }
+.historial { display: grid; gap: 14px; }
+.hist-dia h3 { margin: 4px 2px 8px; font-size: 13px; font-weight: 700; color: var(--text-2); }
+.auditoria li.hist-borrado { background: color-mix(in srgb, #ef4444 9%, var(--surface-2)); }
+.auditoria li.hist-borrado .aud-ico { color: #dc2626; }
 @media (max-width: 520px) { .auditoria li { grid-template-columns: auto 1fr; } .auditoria time { grid-column: 2; } }
 
 /* ---------- Privacidad y textos ---------- */
@@ -1738,3 +1742,19 @@ article.req { display: grid; gap: 12px; align-content: start; padding: 18px; bor
   .app-pie { padding: 16px 16px calc(var(--inferior) + 28px + env(safe-area-inset-bottom)); }
 }
 @media print { .app-pie { display: none; } }
+
+/* ---------- Compartir con otro médico (18-11-2026) ---------- */
+.compartido-clave { font-family: var(--fn); font-size: 22px !important; letter-spacing: 3px; text-align: center; text-transform: uppercase; }
+.compartido-btn { width: 100%; justify-content: center; }
+.compartido-ver { display: grid; gap: 14px; width: min(980px, 100%); }
+.compartido-ver header h1 { margin: 0; font-size: 22px; }
+.compartido-ver header small { color: var(--text-2); }
+.compartir-datos { display: grid; gap: 10px; }
+.compartir-dato { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.compartir-dato small { display: block; color: var(--text-2); font-size: 12px; }
+.compartir-dato code { display: block; font-family: var(--fn); font-size: 14px; overflow-wrap: anywhere; }
+.compartir-dato--clave code { font-size: 22px; letter-spacing: 3px; }
+.enlaces-activos { display: grid; gap: 8px; }
+.enlace-activo { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.enlace-activo strong { display: block; font-size: 14px; }
+.enlace-activo small { color: var(--text-2); font-size: 12px; }

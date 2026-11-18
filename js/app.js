@@ -5,20 +5,23 @@
 import { h, montar } from './core/dom.js';
 import { toast, cerrarTodos } from './core/ui.js';
 import { CONFIG } from './config.js';
-import { iniciarBackend, perfilDe, backend } from './data/servicio.js';
+import { iniciarBackend, perfilDe, backend, fijarActor, historial } from './data/servicio.js';
 import { temaInicial, vigilarInactividad, logo } from './views/shell.js';
 import { portada, pantallaVerificar, pantallaPendiente, pantallaPuertaEquivocada, pantallaCompletarAlta, pantallaCompletarProfesional } from './views/acceso.js';
 import { appPaciente } from './views/paciente.js';
 import { appMedico } from './views/medico.js';
 import './core/instalar.js'; // escucha el aviso de instalación desde el arranque
 
-let actual = null, dejarDeVigilar = null, ultimoUid = undefined;
+let actual = null, dejarDeVigilar = null, ultimoUid = undefined, actualPac = null;
 
 function splash(texto = 'Cargando…') {
   montar(document.getElementById('app'), h('div.splash', logo('grande'), h('div.spinner'), h('small', texto)));
 }
 
-async function salir() {
+async function salir(motivo) {
+  // Historial general: queda quién salió y si fue por inactividad (antes de cerrar la sesión, que después ya no se puede escribir)
+  if (actual) await historial(motivo === 'inactividad' ? 'salida-inactividad' : 'salida', { pac: actualPac });
+  fijarActor(null); actualPac = null;
   dejarDeVigilar?.(); dejarDeVigilar = null;
   if (actual) { const a = actual; actual = null; a.detener?.(); }
   cerrarTodos();
@@ -55,8 +58,11 @@ async function alCambiar(u) {
   }
   if (puerta && puerta !== perfil.rol) { pantallaPuertaEquivocada(perfil.rol); return; }
   if (perfil.rol === 'medico' && perfil.estado !== 'aprobado') { pantallaPendiente(perfil); return; }
-  dejarDeVigilar = vigilarInactividad(salir);
-  actual = perfil.rol === 'medico' ? appMedico(perfil, { onSalir: salir }) : appPaciente(perfil, { onSalir: salir });
+  dejarDeVigilar = vigilarInactividad(() => salir('inactividad'));
+  fijarActor(perfil);
+  actualPac = perfil.rol === 'paciente' ? perfil.uid : null;
+  historial('ingreso', { pac: actualPac });
+  actual = perfil.rol === 'medico' ? appMedico(perfil, { onSalir: () => salir() }) : appPaciente(perfil, { onSalir: () => salir() });
 }
 
 async function iniciar() {
@@ -70,6 +76,13 @@ async function iniciar() {
       const { construirSemilla } = await import('./data/semilla.js');
       const { arbol, archivos, cuentas } = await construirSemilla(B.ahora());
       await B.sembrar(arbol, archivos, cuentas);
+    }
+    // Estudio compartido con otro médico: …/#c/<enlace> (sin cuenta), 18-11-2026
+    const comp = /^#c\/([A-Za-z0-9_-]{16,40})$/.exec(location.hash);
+    if (comp) {
+      const { pantallaCompartido } = await import('./views/compartido.js');
+      await pantallaCompartido(comp[1], { onEntrar: () => { history.replaceState(null, '', location.pathname); location.reload(); } });
+      return;
     }
     // Estado público del turno: el QR del ticket abre ?turno=MTR-XXXX-XXXX
     const codigo = new URLSearchParams(location.search).get('turno');

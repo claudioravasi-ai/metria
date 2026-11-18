@@ -11,7 +11,9 @@ import { hoyISO, heroe, tarjeta, chip, aviso, toast, confirmar, modal, fmt, fmt0
 import { evaluarPaciente } from '../engine/evaluar.js';
 import { edad as calcEdad } from '../engine/anthro.js';
 import * as GL from '../engine/glp1.js';
-import { backend, purgarVencidos, purgarRetencion, verificarIdentidad, guardarNota, editarPacienteMedico, borrarPaciente } from '../data/servicio.js';
+import { backend, purgarVencidos, purgarRetencion, verificarIdentidad, guardarNota, editarPacienteMedico, borrarPaciente, historial } from '../data/servicio.js';
+import { vistaHistorial } from './historial.js';
+import { CONFIG } from '../config.js';
 import { vistaEndoMedico } from './endoscopia.js';
 import { vistaSeguimientoMedico } from './seguimiento.js';
 import * as DE from '../data/endoscopia.js';
@@ -51,13 +53,13 @@ export function appMedico(perfil, { onSalir }) {
     { id: 'panel' }, { id: 'pacientes', badge: null },
     { id: 'endoscopia', badge: (Object.values(S.endo.turnos).flatMap((l) => Object.values(l || {})).filter((t) => t.estado === 'suspendido').length + DE.pendientesUnicos(S.endo.envios).length) || null },
     { id: 'seguimiento', badge: (() => { const b = bandejaSeg(S.seguimiento, hoyISO(B.ahora())); return b.ap.filter((x) => x.vencido).length + b.vencidos.length + b.inmediatos.length || null; })() },
-    ...(perfil.titular ? [{ id: 'medicos', badge: Object.entries(S.estados).filter(([uid, e]) => e === 'pendiente' && uid !== perfil.uid).length || null }] : []),
+    ...(perfil.titular ? [{ id: 'medicos', badge: Object.entries(S.estados).filter(([uid, e]) => e === 'pendiente' && uid !== perfil.uid).length || null }, { id: 'historial' }] : []),
     { id: 'privacidad', nombre: 'Mi cuenta' }, { id: 'ayuda' },
   ];
   const ruta = () => {
     const [a, b] = location.hash.slice(1).split('/');
     if (a === 'ficha' && S.ficha) return { sec: 'pacientes', tab: PESTANAS.some(([k]) => k === b) ? b : 'resumen' };
-    return { sec: ['panel', 'pacientes', 'endoscopia', 'seguimiento', 'medicos', 'privacidad', 'ayuda'].includes(a) ? a : 'panel' };
+    return { sec: ['panel', 'pacientes', 'endoscopia', 'seguimiento', 'medicos', 'historial', 'privacidad', 'ayuda'].includes(a) ? a : 'panel' };
   };
   const ir = (id) => { if (id !== 'pacientes') cerrarFicha(); if (location.hash.slice(1) === id) render(); else location.hash = id; };
   // Si la persona está escribiendo, el cambio que llega de otro equipo espera a que salga del campo
@@ -88,6 +90,8 @@ export function appMedico(perfil, { onSalir }) {
   if (perfil.titular) {
     bajas.push(B.escuchar('medicos', (v) => { S.medicos = v || {}; programar(); }));
     bajas.push(B.escuchar('medicosEstado', (v) => { S.estados = v || {}; programar(); }));
+    // Historial general (solo el coordinador): los últimos 2000 movimientos, en vivo
+    bajas.push(B.escucharUltimos('historial', 2000, (v) => { S.historial = v || {}; if (ruta().sec === 'historial') programar(); }));
   }
   window.addEventListener('hashchange', render);
   purgarVencidos(perfil).then((n) => n && toast(`Se borraron ${n} estudios vencidos`, 'info'));
@@ -103,6 +107,7 @@ export function appMedico(perfil, { onSalir }) {
   }
 
   function abrirFicha(uid) {
+    if (S.ficha?.uid !== uid) historial('abrio-ficha', { pac: uid });
     cerrarFicha();
     S.ficha = { uid, pac: null, estudios: {}, auditoria: {}, verif: null, notas: {} };
     try { sessionStorage.setItem('metria-ficha', uid); } catch { /* */ }
@@ -136,6 +141,7 @@ export function appMedico(perfil, { onSalir }) {
     else if (r.sec === 'endoscopia') contenido = vistaEndoMedico({ perfil, indice: S.indice, ...S.endo, seguimiento: S.seguimiento, alGuardarTurno, abrirFicha, render: programar });
     else if (r.sec === 'seguimiento') contenido = vistaSeguimientoMedico({ indice: S.indice, seguimiento: S.seguimiento, turnos: S.endo.turnos, alGuardarTurno, abrirFicha, render: programar });
     else if (r.sec === 'medicos' && perfil.titular) contenido = vistaMedicos();
+    else if (r.sec === 'historial' && perfil.titular) contenido = vistaHistorial({ registros: S.historial, render: programar });
     else if (r.sec === 'privacidad') contenido = vistaCuenta();
     else if (r.sec === 'ayuda') contenido = vistaManual('medico');
     else contenido = vistaPanel();
@@ -216,7 +222,7 @@ export function appMedico(perfil, { onSalir }) {
           h('div.botones', S.indice[p.uid] ? h('button.btn.btn--suave', { type: 'button', onclick: () => abrirFicha(p.uid) }, 'Abrir ficha') : null,
             h('button.btn.btn--primario', { type: 'button', onclick: async () => { await B.escribir(`solicitudes/${p.uid}/${p.id}/estado`, 'atendido'); toast('Pedido marcado como atendido', 'ok'); } }, 'Marcar atendido'))))) : vacio('okCirculo', 'Sin pedidos pendientes', '')),
       tarjeta('Mantenimiento', { icono: 'basura' },
-        h('p.ayuda', 'Los estudios vencidos se borran solos al abrir la app. Con este botón se revisan todos los estudios de todos los pacientes (incluidos los nunca descargados de más de 90 días).'),
+        h('p.ayuda', `Los estudios vencidos se borran solos al abrir la app. Con este botón se revisan todos los estudios de todos los pacientes (incluidos los nunca abiertos de más de ${CONFIG.diasRetencionMaxima} días y los que llegaron a ${CONFIG.maxDescargas} descargas).`),
         h('button.btn.btn--suave', { type: 'button', onclick: async (e) => { e.target.disabled = true; const n = await purgarRetencion().catch(() => 0); toast(n ? `Se borraron ${n} estudios vencidos` : 'No había estudios vencidos', 'ok'); e.target.disabled = false; } }, icono('basura', { tam: 16 }), 'Barrer estudios vencidos')));
   }
 

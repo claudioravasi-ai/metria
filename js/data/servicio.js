@@ -183,6 +183,10 @@ export async function borrarPaciente(uid) {
   }
   const espera = await B.leer(`esperaEndo/${uid}`).catch(() => null);
   if (espera?.anon) c[`esperaAnon/${espera.anon}`] = null;
+  // Enlaces que el paciente compartió con otros médicos (18-11-2026)
+  const comps = (await B.leer(`compartidosPac/${uid}`).catch(() => null)) || {};
+  for (const tok of Object.keys(comps)) { c[`compartidos/${tok}`] = null; c[`compartidosArchivos/${tok}`] = null; }
+  if (Object.keys(comps).length) c[`compartidosPac/${uid}`] = null;
   for (const r of ['pacientes', 'indice', 'verificados', 'evaluaciones', 'solicitudes', 'estudios', 'estudiosVenc', 'turnosEndo', 'esperaEndo', 'seguimiento']) c[`${r}/${uid}`] = null;
   const per = await B.leer(`pacientes/${uid}/perfil`).catch(() => null);
   if (per?.dni) c[`indiceDni/${await sha256hex(`metria-dni:${String(per.dni).replace(/\D/g, '')}`)}`] = null;
@@ -192,12 +196,58 @@ export async function borrarPaciente(uid) {
 }
 
 /* ---------- Auditoría (sin datos clínicos: solo quién, qué y cuándo) ---------- */
-export async function auditar(pacUid, accion, estudio = null) {
+export async function auditar(pacUid, accion, estudio = null, extra = {}) {
   const u = B.usuario();
   if (!u) return;
   try {
     await B.agregar(`auditoria/${pacUid}`, { quien: u.uid, accion, estudio, cuando: B.TS });
   } catch (e) { console.warn('No se pudo registrar la auditoría', e.code || e); }
+  await historial(accion, { pac: pacUid, estudio, ...extra });
+}
+
+/* ---------- Historial general (pedido de Claudio, 18-11-2026) ----------
+   historial/<id> = { quien, nombre, rol, accion, pac?, pacNombre?, estudio?, estudioTitulo?, cuando }
+   Entradas, salidas, fichas y estudios abiertos, descargas, subidas y borrados, CON NOMBRE de quién lo
+   hizo y de qué paciente. Solo se agrega: las reglas no dejan cambiarlo ni borrarlo, y queda aunque se
+   dé de baja al paciente (constancia, Ley 26.529). Lo ve solo el coordinador. Sin datos clínicos. */
+let ACTOR = null;
+export function fijarActor(perfil) {
+  if (!perfil?.datos) { ACTOR = null; return; }
+  const d = perfil.datos;
+  const nombre = `${d.nombre || ''} ${d.apellido || ''}`.trim() || perfil.email || 'Sin nombre';
+  ACTOR = {
+    uid: perfil.uid, nombre,
+    rol: perfil.rol === 'medico' ? (perfil.titular ? 'coordinador' : 'profesional') : 'paciente',
+    pacNombre: perfil.rol === 'paciente' ? fichaNombre(d) : null,
+  };
+}
+const fichaNombre = (p) => `${[p.apellido, p.nombre].filter(Boolean).join(', ')}${p.dni ? ` · DNI ${p.dni}` : ''}`.trim();
+const NOMBRES = new Map();
+async function nombrePaciente(pac) {
+  if (!pac) return null;
+  if (ACTOR?.uid === pac && ACTOR.pacNombre) return ACTOR.pacNombre;
+  if (NOMBRES.has(pac)) return NOMBRES.get(pac);
+  const p = await B.leer(`pacientes/${pac}/perfil`).catch(() => null);
+  const n = p ? fichaNombre(p) : null;
+  if (n) NOMBRES.set(pac, n);
+  return n;
+}
+export async function historial(accion, { pac = null, estudio = null, estudioTitulo = null, pacNombre = null, detalle = null } = {}) {
+  const u = B.usuario();
+  if (!u) return;
+  try {
+    const yo = ACTOR?.uid === u.uid ? ACTOR : null;
+    const reg = { quien: u.uid, nombre: String(yo?.nombre || u.email || 'Sin nombre').slice(0, 120), rol: yo?.rol || (u.paciente ? 'paciente' : 'profesional'), accion: String(accion).slice(0, 40), cuando: B.TS };
+    if (pac) {
+      reg.pac = pac;
+      const pn = pacNombre || (await nombrePaciente(pac));
+      if (pn) reg.pacNombre = String(pn).slice(0, 140);
+    }
+    if (estudio) reg.estudio = estudio;
+    if (estudioTitulo) reg.estudioTitulo = String(estudioTitulo).slice(0, 120);
+    if (detalle) reg.detalle = String(detalle).slice(0, 120);
+    await B.agregar('historial', reg);
+  } catch (e) { console.warn('No se pudo registrar en el historial', e.code || e); }
 }
 
 /* ---------- Estudios ---------- */
@@ -206,6 +256,8 @@ const RETENCION_MS = () => CONFIG.diasRetencionMaxima * MS_DIA;
 
 export function estadoEstudio(meta, t = B.ahora()) {
   if (!meta) return { id: 'borrado' };
+  // Llegó al límite de descargas (18-11-2026): vence en el acto y se borra
+  if ((meta.descargas || 0) >= CONFIG.maxDescargas) return { id: 'vencido', vence: t, porDescargas: true };
   const limiteRetencion = meta.subidoEn + RETENCION_MS();
   if (meta.descargadoEn) {
     const vence = Math.min(meta.descargadoEn + DESCARGA_MS(), limiteRetencion);
@@ -246,7 +298,7 @@ export async function subirEstudio(pacUid, archivo, { titulo, categoria, fechaEs
     bosquejo: bosquejo || null, partes: n, subidoPor: u.uid, subidoEn: B.TS,
   };
   await B.escribir(`estudios/${pacUid}/${id}`, meta);
-  await auditar(pacUid, 'subio', id);
+  await auditar(pacUid, 'subio', id, { estudioTitulo: meta.titulo });
   return id;
 }
 
@@ -259,23 +311,36 @@ export async function traerEstudio(pacUid, id, meta, progreso = () => {}) {
     trozos.push(deBase64(t));
     progreso((i + 1) / meta.partes);
   }
-  await auditar(pacUid, 'abrio', id);
+  await auditar(pacUid, 'abrio', id, { estudioTitulo: meta.titulo });
   return new Blob(trozos, { type: meta.mime });
 }
 
-/** Primera descarga: arranca la cuenta regresiva de 72 h (hora del servidor). */
-export async function marcarDescarga(pacUid, id, meta, esPaciente) {
-  await auditar(pacUid, 'descargo', id);
-  if (!esPaciente || meta.descargadoEn) return;
+/** Primer retiro del paciente (abrirlo o descargarlo): arranca la cuenta regresiva de 72 h (hora del servidor).
+    18-11-2026 · Antes solo arrancaba con el botón «Descargar» de la app, y DESPUÉS de entregar el archivo:
+    el paciente que lo veía y lo guardaba desde el visor (o cuyo teléfono cortaba al bajar el archivo) quedaba
+    «Sin descargar» para siempre y el borrado de 72 h nunca empezaba. */
+export async function marcarRetiro(pacUid, id, meta) {
+  if (meta.descargadoEn) return;
   await B.escribir(`estudios/${pacUid}/${id}/descargadoEn`, B.TS);
-  await B.escribir(`estudiosVenc/${pacUid}/${id}`, B.TS);
+  try { await B.escribir(`estudiosVenc/${pacUid}/${id}`, B.TS); } catch (e) { console.warn('estudiosVenc', e.code || e); }
+}
+/** Cada descarga del paciente suma 1; a la 3.ª el estudio vence (las reglas lo hacen cumplir). */
+export async function marcarDescarga(pacUid, id, meta, esPaciente) {
+  if (esPaciente) {
+    await marcarRetiro(pacUid, id, meta);
+    const n = (meta.descargas || 0) + 1;
+    try { await B.escribir(`estudios/${pacUid}/${id}/descargas`, n); meta.descargas = n; } catch (e) { console.warn('No se pudo contar la descarga', e.code || e); }
+  }
+  await auditar(pacUid, 'descargo', id, { estudioTitulo: meta.titulo, detalle: esPaciente && meta.descargas ? `descarga ${meta.descargas} de ${CONFIG.maxDescargas}` : null });
 }
 
 export async function borrarEstudio(pacUid, id, motivo = 'borro') {
+  const estudioTitulo = await B.leer(`estudios/${pacUid}/${id}/titulo`).catch(() => null);
+  const pacNombre = await nombrePaciente(pacUid); // antes de borrar, por si después ya no se puede leer
+  await B.borrar(`estudiosVenc/${pacUid}/${id}`).catch(() => {});
   await B.borrar(`estudiosArchivos/${pacUid}/${id}`);
   await B.borrar(`estudios/${pacUid}/${id}`);
-  await B.borrar(`estudiosVenc/${pacUid}/${id}`).catch(() => {});
-  await auditar(pacUid, motivo, id);
+  await auditar(pacUid, motivo, id, { estudioTitulo, pacNombre });
 }
 
 /** Borra lo vencido. El paciente purga lo suyo; los médicos, lo de todos. */

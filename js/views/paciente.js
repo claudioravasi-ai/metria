@@ -57,7 +57,12 @@ export function appPaciente(perfil, { onSalir }) {
     if (seccion() === 'datos' && form?.sucio) { pendiente = true; mostrarBanner(); return; }
     programar();
   }));
-  bajas.push(B.escuchar(`estudios/${uid}`, (v) => { S.estudios = v || {}; S.listo.est = true; if (seccion() !== 'datos') programar(); }));
+  bajas.push(B.escuchar(`estudios/${uid}`, (v) => {
+    S.estudios = v || {}; S.listo.est = true;
+    // Lo vencido (p. ej. a la 3.ª descarga) se borra en el acto, sin esperar el reloj de un minuto
+    if (Object.values(S.estudios).some((m) => estadoEstudio(m).id === 'vencido')) setTimeout(() => purgarVencidos(perfil), 300);
+    if (seccion() !== 'datos') programar();
+  }));
   // Turnos de endoscopia: los del paciente, la configuración y las fechas abiertas (sin datos de otros pacientes)
   bajas.push(B.escuchar(`turnosEndo/${uid}`, (v) => { S.turnos = v || {}; if (['endoscopia', 'inicio'].includes(seccion())) programar(); }));
   bajas.push(B.escuchar(`seguimiento/${uid}`, (v) => { S.seg = v; if (['endoscopia', 'inicio'].includes(seccion())) programar(); }));
@@ -66,6 +71,7 @@ export function appPaciente(perfil, { onSalir }) {
   bajas.push(B.escuchar('endoConfig', (v) => { S.endoConfig = v; if (seccion() === 'endoscopia') programar(); }));
   bajas.push(B.escucharDesde('agendaEndo', hoyISO(B.ahora()), (v) => { S.agenda = v || {}; if (seccion() === 'endoscopia') programar(); }));
   bajas.push(B.escucharDesde('ocupacionEndo', hoyISO(B.ahora()), (v) => { S.ocupacion = v || {}; if (seccion() === 'endoscopia') programar(); }));
+  bajas.push(B.escuchar(`compartidosPac/${uid}`, (v) => { S.compartidos = v || {}; if (seccion() === 'estudios') programar(); }));
   bajas.push(B.escuchar(`auditoria/${uid}`, (v) => { S.auditoria = v || {}; if (seccion() === 'privacidad') programar(); }));
   window.addEventListener('hashchange', render);
   purgarVencidos(perfil).then((n) => n && console.info(`Se borraron ${n} estudios vencidos`));
@@ -102,7 +108,7 @@ export function appPaciente(perfil, { onSalir }) {
       case 'laboratorio': contenido = seccionLaboratorio(ev, { rol: 'paciente', irDatos }); break;
       case 'plan': contenido = vistaPlan(ev, { rol: 'paciente' }); break;
       case 'tratamiento': contenido = vistaTratamientoPaciente({ ev, plan: S.pac.plan, tolerancia: S.pac.tolerancia, uid }); break;
-      case 'estudios': contenido = vistaEstudiosPaciente({ uid, estudios: S.estudios }); break;
+      case 'estudios': contenido = vistaEstudiosPaciente({ uid, estudios: S.estudios, compartidos: S.compartidos }); break;
       case 'endoscopia': contenido = vistaEndoPaciente({ uid, perfil: S.perfil, pac: S.pac, turnos: S.turnos, config: S.endoConfig, agenda: S.agenda, ocupacion: S.ocupacion, espera: S.espera, esperaAnon: S.esperaAnon, seg: S.seg, render: programar }); break;
       case 'privacidad': contenido = vistaPrivacidad({ uid, perfil: S.perfil, auditoria: S.auditoria, estudios: S.estudios }); break;
       case 'ayuda': contenido = vistaManual('paciente'); break;
